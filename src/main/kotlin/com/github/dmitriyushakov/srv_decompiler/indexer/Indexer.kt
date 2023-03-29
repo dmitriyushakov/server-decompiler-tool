@@ -2,6 +2,9 @@ package com.github.dmitriyushakov.srv_decompiler.indexer
 
 import com.github.dmitriyushakov.srv_decompiler.indexer.asm.ClassIndexVisitor
 import com.github.dmitriyushakov.srv_decompiler.indexer.model.Subject
+import com.github.dmitriyushakov.srv_decompiler.reading_context.FileReadingContext
+import com.github.dmitriyushakov.srv_decompiler.reading_context.ReadingContext
+import com.github.dmitriyushakov.srv_decompiler.reading_context.ZipEntryReadingContext
 import com.github.dmitriyushakov.srv_decompiler.registry.BasicIndexRegistry
 import com.github.dmitriyushakov.srv_decompiler.registry.IndexRegistry
 import com.github.dmitriyushakov.srv_decompiler.registry.globalIndexRegistry
@@ -62,9 +65,9 @@ private fun IndexRegistry.indexForSubject(subject: Subject) {
     }
 }
 
-private fun IndexRegistry.indexForClass(inputStream: InputStream) {
+private fun IndexRegistry.indexForClass(inputStream: InputStream, readingContext: ReadingContext) {
     try {
-        val classVisitor = ClassIndexVisitor(Opcodes.ASM9)
+        val classVisitor = ClassIndexVisitor(Opcodes.ASM9, readingContext)
         val classReader = ClassReader(inputStream)
         classReader.accept(classVisitor, ClassReader.SKIP_FRAMES)
         val classSubject = classVisitor.toClassSubject()
@@ -78,21 +81,22 @@ private fun IndexRegistry.indexForClass(inputStream: InputStream) {
 private fun IndexRegistry.indexForClassFile(path: String) {
     FileInputStream(path).use { fileInputStream ->
         val bufferedFileInputStream = BufferedInputStream(fileInputStream)
-        indexForClass(bufferedFileInputStream)
+        indexForClass(bufferedFileInputStream, FileReadingContext(path))
     }
 }
 
-private fun IndexRegistry.indexForZipInputStream(zipInputStream: ZipInputStream) {
+private fun IndexRegistry.indexForZipInputStream(zipInputStream: ZipInputStream, readingContext: ReadingContext) {
     var entry = zipInputStream.getNextEntry()
 
     while (entry != null) {
         val lowerEntryName = entry.name.lowercase()
+        val zipEntryReadingContext = ZipEntryReadingContext(entry.name, readingContext)
 
         if (lowerEntryName.endsWith(CLASS_EXT)) {
-            indexForClass(zipInputStream)
+            indexForClass(zipInputStream, zipEntryReadingContext)
         } else if(lowerEntryName.endsWith(JAR_EXT) || lowerEntryName.endsWith(WAR_EXT)) {
             val nestedZipInputStream = ZipInputStream(zipInputStream)
-            indexForZipInputStream(nestedZipInputStream)
+            indexForZipInputStream(nestedZipInputStream, zipEntryReadingContext)
         }
 
         zipInputStream.closeEntry()
@@ -105,7 +109,7 @@ private fun IndexRegistry.indexForJarFile(path: String) {
         val bufferedFileInputStream = BufferedInputStream(fileInputStream)
 
         ZipInputStream(bufferedFileInputStream).use { zipInputStream ->
-            indexForZipInputStream(zipInputStream)
+            indexForZipInputStream(zipInputStream, FileReadingContext(path))
         }
     }
 }

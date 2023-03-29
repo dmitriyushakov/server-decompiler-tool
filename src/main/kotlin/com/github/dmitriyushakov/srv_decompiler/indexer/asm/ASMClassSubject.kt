@@ -4,6 +4,7 @@ import com.github.dmitriyushakov.srv_decompiler.indexer.model.ClassSubject
 import com.github.dmitriyushakov.srv_decompiler.indexer.model.Dependency
 import com.github.dmitriyushakov.srv_decompiler.indexer.model.FieldSubject
 import com.github.dmitriyushakov.srv_decompiler.indexer.model.MethodSubject
+import com.github.dmitriyushakov.srv_decompiler.reading_context.ReadingContext
 import org.objectweb.asm.Opcodes.*
 
 class ASMClassSubject(
@@ -11,6 +12,7 @@ class ASMClassSubject(
     override val name: String,
     val access: Int,
     override val dependencies: List<Dependency>,
+    override val readingContext: ReadingContext,
 ) : ClassSubject {
     override val isPublic: Boolean get() = access and ACC_PUBLIC != 0
     override val isPrivate: Boolean get() = access and ACC_PRIVATE != 0

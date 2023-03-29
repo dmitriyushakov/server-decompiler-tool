@@ -1,6 +1,7 @@
 package com.github.dmitriyushakov.srv_decompiler.indexer.asm
 
 import com.github.dmitriyushakov.srv_decompiler.indexer.model.*
+import com.github.dmitriyushakov.srv_decompiler.reading_context.ReadingContext
 import com.github.dmitriyushakov.srv_decompiler.utils.bytecode.asmClassNameToPath
 import com.github.dmitriyushakov.srv_decompiler.utils.bytecode.asmGetObjectTypePathFromDescriptor
 import com.github.dmitriyushakov.srv_decompiler.utils.bytecode.asmGetObjectTypePathsFromDescriptor
@@ -12,6 +13,8 @@ import org.objectweb.asm.Opcodes
 import kotlin.properties.Delegates.notNull
 
 class ClassIndexVisitor: ClassVisitor {
+    private val readingContext: ReadingContext
+
     private class VisitedFieldInformation(
         val access: Int,
         val name: String,
@@ -28,8 +31,12 @@ class ClassIndexVisitor: ClassVisitor {
         val methodVisitor: MethodIndexVisitor
     )
 
-    constructor(api: Int): super(api)
-    constructor(api: Int, classVisitor: ClassVisitor): super(api, classVisitor)
+    constructor(api: Int, readingContext: ReadingContext): super(api) {
+        this.readingContext = readingContext
+    }
+    constructor(api: Int, classVisitor: ClassVisitor, readingContext: ReadingContext): super(api, classVisitor) {
+        this.readingContext = readingContext
+    }
 
     private var visitIsCalled: Boolean = false
     private var visitSourceIsCalled: Boolean = false
@@ -143,7 +150,7 @@ class ClassIndexVisitor: ClassVisitor {
             }
         )
 
-        val classSubject = ASMClassSubject(classPath, name, access, classDeps)
+        val classSubject = ASMClassSubject(classPath, name, access, classDeps, readingContext)
 
         classSubject.fields.addAll(
             visitedFields.map { field ->
