@@ -17,7 +17,7 @@ import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
-private val registryPrefix = "registry"
+private const val registryPrefix = "registry"
 private val reg: IndexRegistry get() = globalIndexRegistry
 
 private val Subject.itemType: ItemType get() = when (this) {

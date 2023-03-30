@@ -4,14 +4,15 @@ import java.io.InputStream
 import java.util.zip.ZipInputStream
 
 class ZipEntryReadingContext(val entryName: String, val archiveStreamContext: ReadingContext): ReadingContext {
-    override fun use(actions: (InputStream) -> Unit) {
-        archiveStreamContext.use { archiveStream ->
+    override fun <R> use(actions: (InputStream) -> R): R {
+        return archiveStreamContext.use { archiveStream ->
             ZipInputStream(archiveStream).use { zipInputStream ->
+                var result: R? = null
                 var entry = zipInputStream.getNextEntry()
 
                 while (entry != null) {
                     if (entry.name == entryName) {
-                        actions(zipInputStream)
+                        result = actions(zipInputStream)
                         zipInputStream.closeEntry()
                         break
                     } else {
@@ -20,6 +21,8 @@ class ZipEntryReadingContext(val entryName: String, val archiveStreamContext: Re
 
                     entry = zipInputStream.getNextEntry()
                 }
+
+                result ?: error("Unable to find zip entry with \"$entryName\" name.")
             }
         }
     }

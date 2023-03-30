@@ -8,8 +8,8 @@ import java.io.InputStream
 class FileReadingContext(val file: File): ReadingContext {
     constructor(filename: String): this(File(filename))
 
-    override fun use(actions: (InputStream) -> Unit) {
-        FileInputStream(file).use { fileInputStream ->
+    override fun <R> use(actions: (InputStream) -> R): R {
+        return FileInputStream(file).use { fileInputStream ->
             BufferedInputStream(fileInputStream).use(actions)
         }
     }

@@ -10,6 +10,7 @@ version = "0.1"
 
 repositories {
     mavenCentral()
+    jcenter()
 }
 
 dependencies {
@@ -27,6 +28,8 @@ dependencies {
 
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.7.3")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.5.4")
+
+    implementation("org.jd:jd-core:1.1.3")
 }
 
 application {

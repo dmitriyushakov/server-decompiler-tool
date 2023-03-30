@@ -1,5 +1,7 @@
 package com.github.dmitriyushakov.srv_decompiler.indexer.model
 
+import com.github.dmitriyushakov.srv_decompiler.reading_context.ReadingContext
+
 interface ClassSubject: Subject {
     val name: String
     val isPublic: Boolean
@@ -13,4 +15,5 @@ interface ClassSubject: Subject {
     val methods: List<MethodSubject>
 
     override val childrenSubjects: List<Subject> get() = sequenceOf(fields, methods).flatten().toList()
+    val readingContext: ReadingContext
 }

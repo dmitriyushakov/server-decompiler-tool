@@ -6,4 +6,5 @@ ktor:
       - com.github.dmitriyushakov.srv_decompiler.api.ContentNegotiationInstallKt.contentNegotiationInstallModule
       - com.github.dmitriyushakov.srv_decompiler.statuses.StatusesKt.statusesModule
       - com.github.dmitriyushakov.srv_decompiler.api.IndexRegistryAPIModuleKt.module
+      - com.github.dmitriyushakov.srv_decompiler.api.DecompilersAPIModuleKt.decompilersModule
       - com.github.dmitriyushakov.srv_decompiler.indexer.IndexerModuleKt.indexerModule
