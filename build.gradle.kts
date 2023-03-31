@@ -30,6 +30,7 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.5.4")
 
     implementation("org.jd:jd-core:1.1.3")
+    implementation("org.benf:cfr:0.152")
 }
 
 application {
