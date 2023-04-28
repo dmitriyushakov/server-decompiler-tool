@@ -4,11 +4,14 @@ enum class TokenType {
     Default,
     Keyword,
     TypeName,
+    PrimitiveType,
     MethodName,
     FieldName,
     LocalVariableName,
     NumberLiteral,
     StringLiteral,
+    BooleanLiteral,
     Annotation,
-    Spacing
+    Spacing,
+    Comment
 }

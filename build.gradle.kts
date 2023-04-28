@@ -32,6 +32,8 @@ dependencies {
     implementation("org.jd:jd-core:1.1.3")
     implementation("org.benf:cfr:0.152")
     implementation("org.bitbucket.mstrobel:procyon-compilertools:0.6.0")
+
+    implementation("com.github.javaparser:javaparser-core-serialization:3.25.2")
 }
 
 application {
