@@ -1,7 +1,9 @@
 package com.github.dmitriyushakov.srv_decompiler.api
 
 import com.github.dmitriyushakov.srv_decompiler.common.constants.apiPrefix
+import com.github.dmitriyushakov.srv_decompiler.decompilers.DecompilersResponse
 import com.github.dmitriyushakov.srv_decompiler.decompilers.decompilers
+import com.github.dmitriyushakov.srv_decompiler.decompilers.decompilersList
 import com.github.dmitriyushakov.srv_decompiler.registry.IndexRegistry
 import com.github.dmitriyushakov.srv_decompiler.registry.globalIndexRegistry
 import com.github.dmitriyushakov.srv_decompiler.statuses.badRequest
@@ -28,6 +30,14 @@ fun Application.decompilersModule() {
             val code = decompiler.decompile(reg.subjectsIndex, path)
 
             call.respondText(code)
+        }
+
+        get("$apiPrefix/$decompilerPrefix/decompilers") {
+            val response = DecompilersResponse.make(
+                decompilers = decompilersList
+            )
+
+            call.respond(response)
         }
     }
 }
