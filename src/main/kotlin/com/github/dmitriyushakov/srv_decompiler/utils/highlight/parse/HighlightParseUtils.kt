@@ -1,7 +1,9 @@
 package com.github.dmitriyushakov.srv_decompiler.utils.highlight.parse
 
-import com.github.dmitriyushakov.srv_decompiler.highlight.TokenType
+import com.github.dmitriyushakov.srv_decompiler.exception.JavaParserProblemsException
+import com.github.dmitriyushakov.srv_decompiler.highlight.*
 import com.github.dmitriyushakov.srv_decompiler.highlight.TokenType.*
+import com.github.javaparser.JavaParser
 import com.github.javaparser.JavaToken
 import com.github.javaparser.JavaToken.Kind.*
 
@@ -96,10 +98,75 @@ fun JavaToken.toTokenType(): TokenType = when(valueOf(kind)) {
     ENTER_TEXT_BLOCK,
     TEXT_BLOCK_LITERAL,
     TEXT_BLOCK_CONTENT -> StringLiteral
+    IDENTIFIER -> Identifier
+    ASSIGN,
+    LT,
+    BANG,
+    TILDE,
+    HOOK,
+    EQ,
+    GE,
+    LE,
+    NE,
+    SC_AND,
+    SC_OR,
+    INCR,
+    DECR,
+    PLUS,
+    MINUS,
+    STAR,
+    SLASH,
+    BIT_AND,
+    BIT_OR,
+    XOR,
+    REM,
+    LSHIFT,
+    PLUSASSIGN,
+    MINUSASSIGN,
+    STARASSIGN,
+    SLASHASSIGN,
+    ANDASSIGN,
+    ORASSIGN,
+    XORASSIGN,
+    REMASSIGN,
+    LSHIFTASSIGN,
+    RSIGNEDSHIFTASSIGN,
+    RUNSIGNEDSHIFTASSIGN,
+    RUNSIGNEDSHIFT,
+    RSIGNEDSHIFT,
+    GT -> Operator
     else -> Default
 }
 
 val JavaToken.isEndOfLine: Boolean get() = when(valueOf(kind)) {
     WINDOWS_EOL, UNIX_EOL, OLD_MAC_EOL -> true
     else -> false
+}
+
+fun JavaToken.toHighlightToken(): Token = BasicToken(toTokenType(), text)
+
+fun javaSourceToHighlight(text: String): CodeHighlight {
+    val javaParser = JavaParser()
+    val parseResult = javaParser.parse(text)
+
+    if (parseResult.isSuccessful) {
+        val cu = parseResult.result.get()
+        val currentLineTokens = mutableListOf<Token>()
+        val highlightLines = mutableListOf<CodeLine>()
+
+        for (javaToken in cu.tokenRange.get()) {
+            if (javaToken.isEndOfLine) {
+                highlightLines.add(CodeLine(currentLineTokens.toList()))
+                currentLineTokens.clear()
+            } else {
+                currentLineTokens.add(javaToken.toHighlightToken())
+            }
+        }
+
+        if (currentLineTokens.size > 0) highlightLines.add(CodeLine(currentLineTokens.toList()))
+
+        return CodeHighlight(highlightLines)
+    } else {
+        throw JavaParserProblemsException(parseResult.problems)
+    }
 }

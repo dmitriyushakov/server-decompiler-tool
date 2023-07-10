@@ -3,15 +3,12 @@ package com.github.dmitriyushakov.srv_decompiler.highlight
 enum class TokenType {
     Default,
     Keyword,
-    TypeName,
     PrimitiveType,
-    MethodName,
-    FieldName,
-    LocalVariableName,
+    Identifier,
     NumberLiteral,
     StringLiteral,
     BooleanLiteral,
-    Annotation,
+    Operator,
     Spacing,
     Comment
 }
