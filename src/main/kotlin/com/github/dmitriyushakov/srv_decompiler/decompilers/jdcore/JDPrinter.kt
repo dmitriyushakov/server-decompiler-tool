@@ -34,7 +34,7 @@ class JDPrinter: Printer {
         sb.append(name)
     }
 
-    override fun printReference(type: Int, internalTypeName: String?, name: String, descriptor: String?, ownerInternalName: String?) {
+    override fun printReference(type: Int, internalTypeName: String?, name: String?, descriptor: String?, ownerInternalName: String?) {
         sb.append(name)
     }
 
