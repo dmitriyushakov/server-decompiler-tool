@@ -7,6 +7,7 @@ import com.github.dmitriyushakov.srv_decompiler.indexer.model.MethodSubject
 
 class ASMMethodSubject(
     override val owner: ClassSubject,
+    override val static: Boolean,
     override val name: String,
     override val descriptor: String,
     override val path: List<String>,

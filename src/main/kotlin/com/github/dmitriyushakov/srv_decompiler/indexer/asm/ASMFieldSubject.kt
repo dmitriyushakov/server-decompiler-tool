@@ -7,6 +7,7 @@ import com.github.dmitriyushakov.srv_decompiler.indexer.model.Subject
 
 class ASMFieldSubject(
     override val owner: ClassSubject,
+    override val static: Boolean,
     override val name: String,
     override val descriptor: String,
     override val path: List<String>,

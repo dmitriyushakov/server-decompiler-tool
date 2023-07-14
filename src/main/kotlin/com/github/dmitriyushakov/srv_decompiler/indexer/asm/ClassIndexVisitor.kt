@@ -101,8 +101,11 @@ class ClassIndexVisitor: ClassVisitor {
             ).flatten().toList()
         }
 
+        val isStatic = access and Opcodes.ACC_STATIC != 0
+
         val methodSubject = ASMMethodSubject(
             owner,
+            isStatic,
             name,
             descriptor,
             methodPath,
@@ -162,7 +165,9 @@ class ClassIndexVisitor: ClassVisitor {
                         ASMDependency(fieldPath, depPath, DependencyType.FieldType)
                     }
 
-                ASMFieldSubject(classSubject, field.name, field.descriptor, fieldPath, dependencies)
+                val isStatic = field.access and Opcodes.ACC_STATIC != 0
+
+                ASMFieldSubject(classSubject, isStatic, field.name, field.descriptor, fieldPath, dependencies)
             }
         )
 
