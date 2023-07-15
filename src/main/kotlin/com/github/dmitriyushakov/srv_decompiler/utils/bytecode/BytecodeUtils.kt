@@ -58,6 +58,7 @@ fun asmGetObjectTypePathFromDescriptor(desc: String): Path? = asmGetObjectTypePa
 fun pathToHumanReadableName(path: Path): String = path.joinToString(".")
 fun pathToString(path: Path): String = path.joinToString("/")
 
+fun addPathSimpleName(path: Path, name: String): Path = path.toMutableList().apply { add(name) }
 fun getPathShortName(path: Path): String? {
     val lastName = path.last()
     if (lastName.indexOf('$') == -1) return lastName
