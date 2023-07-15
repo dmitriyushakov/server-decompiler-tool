@@ -13,6 +13,7 @@ object EmptyIndexRegistry: IndexRegistry {
         override fun contains(path: List<String>): Boolean = false
         override fun getChildItems(path: List<String>): List<Pair<String, List<T>>> = emptyList()
         override fun searchForPath(path: Path, onlyRoot: Boolean): List<T> = emptyList()
+        override fun findTopElement(path: Path, predicate: (Path, T) -> Boolean): Pair<Path, T>? = null
     }
 
     override val subjectsIndex: PathIndex<Subject> = EmptyPathIndex()

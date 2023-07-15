@@ -1,23 +1,21 @@
 package com.github.dmitriyushakov.srv_decompiler.highlight.scope
 
-import com.github.dmitriyushakov.srv_decompiler.registry.Path
-
 abstract class AbstractScope(
     private val parentScope: Scope? = null
 ): Scope {
-    override fun resolveClass(name: String): Path? {
+    override fun resolveClass(name: String): Link? {
         return parentScope?.resolveClass(name)
     }
 
-    override fun resolveMethod(name: String): Path? {
+    override fun resolveMethod(name: String): Link? {
         return parentScope?.resolveMethod(name)
     }
 
-    override fun resolveField(name: String): Path? {
+    override fun resolveField(name: String): Link? {
         return parentScope?.resolveField(name)
     }
 
-    override fun resolveLocalVariable(name: String): Path? {
+    override fun resolveLocalVariable(name: String): Link? {
         return parentScope?.resolveLocalVariable(name)
     }
 }

@@ -4,37 +4,43 @@ import com.github.dmitriyushakov.srv_decompiler.registry.Path
 
 class ClassScope private constructor(
     parentScope: Scope,
-    private val classMap: Map<String, Path>,
-    private val methodMap: Map<String, Path>,
-    private val fieldMap: Map<String, Path>
+    private val classMap: Map<String, Link>,
+    private val methodMap: Map<String, Link>,
+    private val fieldMap: Map<String, Link>
 ): AbstractScope(parentScope) {
-    override fun resolveClass(name: String): Path? {
+    override fun resolveClass(name: String): Link? {
         return classMap[name] ?: super.resolveClass(name)
     }
 
-    override fun resolveMethod(name: String): Path? {
+    override fun resolveMethod(name: String): Link? {
         return methodMap[name] ?: super.resolveMethod(name)
     }
 
-    override fun resolveField(name: String): Path? {
+    override fun resolveField(name: String): Link? {
         return fieldMap[name] ?: super.resolveField(name)
     }
 
     class Builder(private val parentScope: Scope) {
-        private val classMap: MutableMap<String, Path> = mutableMapOf()
-        private val methodMap: MutableMap<String, Path> = mutableMapOf()
-        private val fieldMap: MutableMap<String, Path> = mutableMapOf()
+        private val classMap: MutableMap<String, Link> = mutableMapOf()
+        private val methodMap: MutableMap<String, Link> = mutableMapOf()
+        private val fieldMap: MutableMap<String, Link> = mutableMapOf()
 
-        fun addClass(name: String, path: Path) {
-            classMap[name] = path
+        fun addClass(name: String, path: Path, lineNumber: Int? = null) {
+            Link.fromPath(path, lineNumber)?.let { link ->
+                classMap[name] = link
+            }
         }
 
-        fun addMethod(name: String, path: Path) {
-            methodMap[name] = path
+        fun addMethod(name: String, path: Path, lineNumber: Int? = null) {
+            Link.fromPath(path, lineNumber)?.let { link ->
+                methodMap[name] = link
+            }
         }
 
-        fun addField(name: String, path: Path) {
-            fieldMap[name] = path
+        fun addField(name: String, path: Path, lineNumber: Int? = null) {
+            Link.fromPath(path, lineNumber)?.let { link ->
+                fieldMap[name] = link
+            }
         }
 
         fun build(): ClassScope = ClassScope(parentScope, classMap.toMap(), methodMap.toMap(), fieldMap.toMap())

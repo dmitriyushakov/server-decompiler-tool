@@ -123,4 +123,24 @@ class MapTreePathIndex<T>: PathIndex<T> {
         visitForNextNode(path, onlyRoot, rootNode, results)
         return results
     }
+
+    override fun findTopElement(path: Path, predicate: (Path, T) -> Boolean): Pair<Path, T>? {
+        val currentPath = mutableListOf<String>()
+        var node = rootNode
+
+        for (res in node.values) {
+            if (predicate(emptyList(), res)) return emptyList<String>() to res
+        }
+
+        for (elem in path) {
+            currentPath.add(elem)
+            node = node[elem] ?: return null
+            val immutableCurrentPath: Path = currentPath.toList()
+            for (res in node.values) {
+                if (predicate(immutableCurrentPath, res)) return immutableCurrentPath to res
+            }
+        }
+
+        return null
+    }
 }

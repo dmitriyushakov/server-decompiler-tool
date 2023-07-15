@@ -1,5 +1,7 @@
 package com.github.dmitriyushakov.srv_decompiler.utils.bytecode
 
+import com.github.dmitriyushakov.srv_decompiler.indexer.model.ClassSubject
+import com.github.dmitriyushakov.srv_decompiler.indexer.model.Subject
 import com.github.dmitriyushakov.srv_decompiler.registry.Path
 import com.github.dmitriyushakov.srv_decompiler.registry.PathIndex
 
@@ -127,3 +129,5 @@ fun <T> PathIndex<T>.searchForHumanReadableName(name: String): List<T> {
 
     return results
 }
+
+fun PathIndex<Subject>.findTopLevelClassPath(path: Path): Path? = findTopElement(path) { _, item -> item is ClassSubject }?.first

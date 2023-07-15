@@ -23,6 +23,7 @@ import com.github.javaparser.JavaToken
 import com.github.javaparser.JavaToken.Kind.*
 import com.github.javaparser.Problem
 import com.github.javaparser.ast.CompilationUnit
+import com.github.javaparser.ast.Node
 import com.github.javaparser.ast.body.TypeDeclaration
 import com.github.javaparser.ast.body.VariableDeclarator
 import com.github.javaparser.ast.expr.Expression
@@ -288,6 +289,8 @@ private fun CompilationUnit.collectCompilationUnitScope(): CompilationUnitScope 
     }
 }
 
+private val Node.lineNumber: Int? get() = range.getOrNull()?.begin?.line
+
 private val <T: TypeDeclaration<*>> TypeDeclaration<T>.nestedTypes get(): List<TypeDeclaration<T>> =
     members.mapNotNull { it as? TypeDeclaration<T> }
 
@@ -300,20 +303,26 @@ private fun TypeDeclaration<*>.collectClassScope(compilationUnitScope: Compilati
         for (variable in field.variables) {
             val fieldName = variable.name.asString()
             val fieldPath = addPathSimpleName(classPath, fieldName)
-            addField(fieldName, fieldPath)
+            val lineNumber = variable.lineNumber
+
+            addField(fieldName, fieldPath, lineNumber)
         }
     }
 
     for (method in declaration.methods) {
         val methodName = method.name.asString()
         val methodPath = addPathSimpleName(classPath, methodName)
-        addMethod(methodName, methodPath)
+        val lineNumber = method.lineNumber
+
+        addMethod(methodName, methodPath, lineNumber)
     }
 
     for (nestedType in declaration.nestedTypes) {
         val nestedTypeName = nestedType.name.asString()
         val nestedTypePath = addPathSimpleName(classPath, nestedTypeName)
-        addClass(nestedTypeName, nestedTypePath)
+        val lineNumber = nestedType.lineNumber
+
+        addClass(nestedTypeName, nestedTypePath, lineNumber)
     }
 }
 
@@ -322,8 +331,9 @@ private fun MethodScope.fillScopeByVariables(blockPath: Path, variables: Iterabl
         for (variable in variables) {
             val variableName = variable.name.asString()
             val variablePath = addPathSimpleName(blockPath, variableName)
+            val variableLineNumber = variable.lineNumber
 
-            addLocalVar(variableName, variablePath)
+            addLocalVar(variableName, variablePath, variableLineNumber)
         }
     }
 }
@@ -415,8 +425,10 @@ private fun highlightVisitStatement(statement: Statement, blockPath: Path, scope
             for (catchClause in statement.catchClauses) {
                 val parameterName = catchClause.parameter.name.asString()
                 val parameterPath = addPathSimpleName(blockPath, parameterName)
+                val parameterLineNumber = catchClause.parameter.lineNumber
+
                 val catchScope = tryScope.reference.buildChild {
-                    addLocalVar(parameterName, parameterPath)
+                    addLocalVar(parameterName, parameterPath, parameterLineNumber)
                 }
 
                 catchClause.body.highlightVisitBlock(blockPath, catchScope)
@@ -471,7 +483,7 @@ private fun highlightVisitType(cuScope: CompilationUnitScope, typeDeclaration: T
                     val parameterName = parameter.name.asString()
                     val parameterPath = addPathSimpleName(methodPath, parameterName)
 
-                    addLocalVar(parameterName, parameterPath)
+                    addLocalVar(parameterName, parameterPath, parameter.lineNumber)
                 }
             }
 
@@ -489,7 +501,7 @@ private fun highlightVisitType(cuScope: CompilationUnitScope, typeDeclaration: T
                 val parameterName = parameter.name.asString()
                 val parameterPath = addPathSimpleName(constructorPath, parameterName)
 
-                addLocalVar(parameterName, parameterPath)
+                addLocalVar(parameterName, parameterPath, parameter.lineNumber)
             }
         }
 
@@ -497,7 +509,7 @@ private fun highlightVisitType(cuScope: CompilationUnitScope, typeDeclaration: T
     }
 
     for(nestedType in typeDeclaration.nestedTypes) {
-        highlightVisitType(cuScope, typeDeclaration)
+        highlightVisitType(cuScope, nestedType)
     }
 }
 
