@@ -76,5 +76,4 @@ class CompilationUnitScope private constructor(
     }
 
     fun classScopeBuilder(): ClassScope.Builder = ClassScope.Builder(this)
-    fun buildClassScope(actions: ClassScope.Builder.() -> Unit): ClassScope = classScopeBuilder().apply(actions).build()
 }

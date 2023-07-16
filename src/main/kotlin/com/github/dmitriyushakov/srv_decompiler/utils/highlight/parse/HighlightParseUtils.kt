@@ -6,9 +6,7 @@ import com.github.dmitriyushakov.srv_decompiler.common.ref
 import com.github.dmitriyushakov.srv_decompiler.exception.JavaParserProblemsException
 import com.github.dmitriyushakov.srv_decompiler.highlight.*
 import com.github.dmitriyushakov.srv_decompiler.highlight.TokenType.*
-import com.github.dmitriyushakov.srv_decompiler.highlight.scope.ClassScope
-import com.github.dmitriyushakov.srv_decompiler.highlight.scope.CompilationUnitScope
-import com.github.dmitriyushakov.srv_decompiler.highlight.scope.MethodScope
+import com.github.dmitriyushakov.srv_decompiler.highlight.scope.*
 import com.github.dmitriyushakov.srv_decompiler.indexer.model.ClassSubject
 import com.github.dmitriyushakov.srv_decompiler.indexer.model.FieldSubject
 import com.github.dmitriyushakov.srv_decompiler.indexer.model.MethodSubject
@@ -17,17 +15,40 @@ import com.github.dmitriyushakov.srv_decompiler.registry.Path
 import com.github.dmitriyushakov.srv_decompiler.registry.globalIndexRegistry
 import com.github.dmitriyushakov.srv_decompiler.utils.bytecode.addPathSimpleName
 import com.github.dmitriyushakov.srv_decompiler.utils.bytecode.getPathShortName
-import com.github.dmitriyushakov.srv_decompiler.utils.highlight.sourceToHighlight
 import com.github.javaparser.JavaParser
 import com.github.javaparser.JavaToken
 import com.github.javaparser.JavaToken.Kind.*
 import com.github.javaparser.Problem
+import com.github.javaparser.Range
 import com.github.javaparser.ast.CompilationUnit
+import com.github.javaparser.ast.ImportDeclaration
 import com.github.javaparser.ast.Node
 import com.github.javaparser.ast.body.TypeDeclaration
 import com.github.javaparser.ast.body.VariableDeclarator
+import com.github.javaparser.ast.expr.ArrayAccessExpr
+import com.github.javaparser.ast.expr.ArrayCreationExpr
+import com.github.javaparser.ast.expr.ArrayInitializerExpr
+import com.github.javaparser.ast.expr.AssignExpr
+import com.github.javaparser.ast.expr.BinaryExpr
+import com.github.javaparser.ast.expr.CastExpr
+import com.github.javaparser.ast.expr.ClassExpr
+import com.github.javaparser.ast.expr.ConditionalExpr
+import com.github.javaparser.ast.expr.EnclosedExpr
 import com.github.javaparser.ast.expr.Expression
+import com.github.javaparser.ast.expr.FieldAccessExpr
+import com.github.javaparser.ast.expr.InstanceOfExpr
+import com.github.javaparser.ast.expr.LambdaExpr
+import com.github.javaparser.ast.expr.MethodCallExpr
+import com.github.javaparser.ast.expr.MethodReferenceExpr
+import com.github.javaparser.ast.expr.NameExpr
+import com.github.javaparser.ast.expr.ObjectCreationExpr
+import com.github.javaparser.ast.expr.SuperExpr
+import com.github.javaparser.ast.expr.SwitchExpr
+import com.github.javaparser.ast.expr.ThisExpr
+import com.github.javaparser.ast.expr.TypeExpr
+import com.github.javaparser.ast.expr.UnaryExpr
 import com.github.javaparser.ast.expr.VariableDeclarationExpr
+import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName
 import com.github.javaparser.ast.stmt.AssertStmt
 import com.github.javaparser.ast.stmt.BlockStmt
 import com.github.javaparser.ast.stmt.DoStmt
@@ -44,6 +65,7 @@ import com.github.javaparser.ast.stmt.ThrowStmt
 import com.github.javaparser.ast.stmt.TryStmt
 import com.github.javaparser.ast.stmt.WhileStmt
 import com.github.javaparser.ast.stmt.YieldStmt
+import com.github.javaparser.ast.type.Type
 import org.slf4j.LoggerFactory
 
 private class HighlightParseUtils
@@ -211,40 +233,67 @@ fun problemsToString(problems: List<Problem>): String {
     return sb.toString()
 }
 
+private class LinksAccumulator {
+    val links: MutableList<LinkItem> = mutableListOf()
+
+    fun add(range: Range, link: Link) {
+        links.add(LinkItem(range, link))
+    }
+
+    data class LinkItem(
+        val range: Range,
+        val link: Link
+    )
+}
+
 private fun CompilationUnitScope.Builder.addAsteriskImport(path: Path) {
     val packageChildren = globalIndexRegistry.subjectsIndex.getChildItems(path)
 
     for ((_, subjects) in packageChildren) {
+        var added = false
         for (subject in subjects) {
             val subjPath = subject.path
             val shortName = getPathShortName(subjPath)
             if (shortName != null) {
                 addTypeImportOnDemand(shortName, subjPath)
+                added = true
             }
+            if (added) break
         }
+        if (added) break
     }
 }
 
-private fun CompilationUnitScope.Builder.addSingleImport(subject: Subject) {
+private fun CompilationUnitScope.Builder.addSingleImport(linksAcc: LinksAccumulator, importDeclaration: ImportDeclaration, subject: Subject): Boolean {
+    var added = false
     val subjPath = subject.path
     val shortName = getPathShortName(subjPath)
     if (shortName != null) {
         addSingleTypeImport(shortName, subjPath)
+
+        val range = importDeclaration.name.range.getOrNull()
+        val link = Link.fromPath(subjPath)
+
+        if (range != null && link != null) linksAcc.add(range, link)
+
+        added = true
     }
     for (child in subject.childrenSubjects) {
         if (child is ClassSubject) {
-            addSingleImport(child)
+            added = added || addSingleImport(linksAcc, importDeclaration, child)
         }
     }
+    return added
 }
 
-private fun CompilationUnitScope.Builder.addSingleImport(path: Path) {
+private fun CompilationUnitScope.Builder.addSingleImport(linksAcc: LinksAccumulator, importDeclaration: ImportDeclaration, path: Path) {
     for (subject in globalIndexRegistry.subjectsIndex.get(path)) {
-        addSingleImport(subject)
+        val added = addSingleImport(linksAcc, importDeclaration, subject)
+        if (added) break
     }
 }
 
-private fun CompilationUnit.collectCompilationUnitScope(): CompilationUnitScope = CompilationUnitScope.build {
+private fun CompilationUnit.collectCompilationUnitScope(linksAcc: LinksAccumulator): CompilationUnitScope = CompilationUnitScope.build {
     val cu = this@collectCompilationUnitScope
 
     val packageDeclaration = cu.packageDeclaration.getOrNull()
@@ -259,23 +308,38 @@ private fun CompilationUnit.collectCompilationUnitScope(): CompilationUnitScope 
             if (importDeclaration.isAsterisk) {
                 val subjects = globalIndexRegistry.subjectsIndex[path]
                 for (subject in subjects) {
+                    var added = false
                     for (child in subject.childrenSubjects) {
                         if (child is MethodSubject && child.static) {
                             addStaticImportOnDemand(child.name, child.path)
+                            added = true
                         }
                         if (child is FieldSubject && child.static) {
                             addStaticImportOnDemand(child.name, child.path)
+                            added = true
                         }
+                        if (added) break
                     }
+                    if (added) break
                 }
             } else {
                 val subjects = globalIndexRegistry.subjectsIndex[path]
                 for (subject in subjects) {
+                    var added = false
                     if (subject is MethodSubject && subject.static) {
                         addSingleTypeStaticImport(subject.name, subject.path)
+                        added = true
                     }
                     if (subject is FieldSubject && subject.static) {
                         addSingleTypeStaticImport(subject.name, subject.path)
+                        added = true
+                    }
+                    if (added) {
+                        val link = Link.fromPath(subject.path)
+                        val range = importDeclaration.name.range.getOrNull()
+
+                        if (link != null && range != null) linksAcc.add(range, link)
+                        break
                     }
                 }
             }
@@ -283,7 +347,7 @@ private fun CompilationUnit.collectCompilationUnitScope(): CompilationUnitScope 
             if (importDeclaration.isAsterisk) {
                 addAsteriskImport(path)
             } else {
-                addSingleImport(path)
+                addSingleImport(linksAcc, importDeclaration, path)
             }
         }
     }
@@ -294,9 +358,9 @@ private val Node.lineNumber: Int? get() = range.getOrNull()?.begin?.line
 private val <T: TypeDeclaration<*>> TypeDeclaration<T>.nestedTypes get(): List<TypeDeclaration<T>> =
     members.mapNotNull { it as? TypeDeclaration<T> }
 
-private fun TypeDeclaration<*>.collectClassScope(compilationUnitScope: CompilationUnitScope): ClassScope = compilationUnitScope.buildClassScope {
+private fun TypeDeclaration<*>.collectClassScope(linksAcc: LinksAccumulator, parentScope: Scope): ClassScope = ClassScope.buildFrom(parentScope) {
     val declaration = this@collectClassScope
-    if (declaration.fullyQualifiedName.isEmpty) return@buildClassScope
+    if (declaration.fullyQualifiedName.isEmpty) return@buildFrom
     val classPath = declaration.fullyQualifiedName.get().split('.')
 
     for (field in declaration.fields) {
@@ -342,16 +406,145 @@ private fun SharedMutableReference<MethodScope>.fillScopeByVariables(blockPath: 
     reference = reference.fillScopeByVariables(blockPath, variables)
 }
 
-private fun highlightVisitExpression(expression: Expression, blockPath: Path, scope: SharedMutableReference<MethodScope>) {
+private fun highlightVisitMethodExpression(linksAcc: LinksAccumulator, expression: Expression, blockPath: Path, scope: SharedMutableReference<MethodScope>) {
     if (expression is VariableDeclarationExpr) {
+        for (variable in expression.variables) {
+            addTypeLink(variable.type, linksAcc, scope.reference)
+            variable.initializer.getOrNull()?.let { highlightVisitExpression(linksAcc, it, blockPath, scope.reference) }
+        }
         scope.fillScopeByVariables(blockPath, expression.variables)
+    } else {
+        highlightVisitExpression(linksAcc, expression, blockPath, scope.reference)
     }
 }
-private fun highlightVisitStatement(statement: Statement, blockPath: Path, scope: SharedMutableReference<MethodScope>) {
+
+private fun Scope.toMethodScope(): MethodScope = (this as? MethodScope) ?: MethodScope.Builder(this).build()
+
+private fun highlightVisitExpression(linksAcc: LinksAccumulator, expression: Expression, blockPath: Path, scope: Scope) {
+    when (expression) {
+        is ArrayAccessExpr -> {
+            highlightVisitExpression(linksAcc, expression.name, blockPath, scope)
+            highlightVisitExpression(linksAcc, expression.index, blockPath, scope)
+        }
+        is ArrayCreationExpr -> {
+            addTypeLink(expression.elementType, linksAcc, scope)
+            expression.initializer.getOrNull()?.let { highlightVisitExpression(linksAcc, it, blockPath, scope) }
+        }
+        is ArrayInitializerExpr -> {
+            for (valueExpr in expression.values) {
+                highlightVisitExpression(linksAcc, valueExpr, blockPath, scope)
+            }
+        }
+        is AssignExpr -> {
+            highlightVisitExpression(linksAcc, expression.target, blockPath, scope)
+            highlightVisitExpression(linksAcc, expression.value, blockPath, scope)
+        }
+        is BinaryExpr -> {
+            highlightVisitExpression(linksAcc, expression.left, blockPath, scope)
+            highlightVisitExpression(linksAcc, expression.right, blockPath, scope)
+        }
+        is CastExpr -> {
+            addTypeLink(expression.type, linksAcc, scope)
+            highlightVisitExpression(linksAcc, expression.expression, blockPath, scope)
+        }
+        is ClassExpr -> {
+            addTypeLink(expression.type, linksAcc, scope)
+        }
+        is ConditionalExpr -> {
+            highlightVisitExpression(linksAcc, expression.condition, blockPath, scope)
+            highlightVisitExpression(linksAcc, expression.thenExpr, blockPath, scope)
+            highlightVisitExpression(linksAcc, expression.elseExpr, blockPath, scope)
+        }
+        is EnclosedExpr -> {
+            highlightVisitExpression(linksAcc, expression.inner, blockPath, scope)
+        }
+        is FieldAccessExpr -> {
+            highlightVisitExpression(linksAcc, expression.scope, blockPath, scope)
+            //TODO: scope expression type resolution and field link search
+        }
+        is InstanceOfExpr -> {
+            highlightVisitExpression(linksAcc, expression.expression, blockPath, scope)
+            addTypeLink(expression.type, linksAcc, scope)
+        }
+        is LambdaExpr -> {
+            val methodScope = scope.toMethodScope().let(::ref)
+            highlightVisitStatement(linksAcc, expression.body, blockPath, methodScope)
+        }
+        is MethodCallExpr -> {
+            expression.scope.getOrNull()?.let { highlightVisitExpression(linksAcc, it, blockPath, scope) }
+            //TODO: scope expression type resolution and method link search
+            for (argument in expression.arguments) {
+                highlightVisitExpression(linksAcc, argument, blockPath, scope)
+            }
+        }
+        is MethodReferenceExpr -> {
+            highlightVisitExpression(linksAcc, expression.scope, blockPath, scope)
+            //TODO: scope expression type resolution and method link search
+            expression.typeArguments.getOrNull()?.forEach { type ->
+                addTypeLink(type, linksAcc, scope)
+            }
+        }
+        is NameExpr -> {
+            val name = expression.name.asString()
+            val link = scope.resolveLocalVariable(name) ?: scope.resolveField(name)
+            val range = expression.range.getOrNull()
+
+            if (range != null && link != null) linksAcc.add(range, link)
+        }
+        is ObjectCreationExpr -> {
+            expression.scope.getOrNull()?.let { highlightVisitExpression(linksAcc, expression, blockPath, scope) }
+            addTypeLink(expression.type, linksAcc, scope)
+            expression.typeArguments.getOrNull()?.forEach { type ->
+                addTypeLink(type, linksAcc, scope)
+            }
+            for (argument in expression.arguments) {
+                highlightVisitExpression(linksAcc, argument, blockPath, scope)
+            }
+        }
+        is SuperExpr -> {
+            val typeName = expression.typeName.getOrNull()
+            if (typeName != null) {
+                val typeLink = typeName.asString().let { scope.resolveClass(it) }
+                val typeRange = typeName.range.getOrNull()
+
+                if (typeLink != null && typeRange != null) linksAcc.add(typeRange, typeLink)
+            }
+        }
+        is SwitchExpr -> {
+            highlightVisitExpression(linksAcc, expression.selector, blockPath, scope)
+            val methodScope = scope.toMethodScope().let(::ref)
+            for (entry in expression.entries) {
+                for (label in entry.labels) {
+                    highlightVisitMethodExpression(linksAcc, label, blockPath, methodScope)
+                }
+
+                for (entryStatement in entry.statements) {
+                    highlightVisitStatement(linksAcc, entryStatement, blockPath, methodScope)
+                }
+            }
+        }
+        is ThisExpr -> {
+            val typeName = expression.typeName.getOrNull()
+            if (typeName != null) {
+                val typeLink = typeName.asString().let { scope.resolveClass(it) }
+                val typeRange = typeName.range.getOrNull()
+
+                if (typeLink != null && typeRange != null) linksAcc.add(typeRange, typeLink)
+            }
+        }
+        is TypeExpr -> {
+            addTypeLink(expression.type, linksAcc, scope)
+        }
+        is UnaryExpr -> {
+            highlightVisitExpression(linksAcc, expression.expression, blockPath, scope)
+        }
+    }
+}
+private fun highlightVisitStatement(linksAcc: LinksAccumulator, statement: Statement, blockPath: Path, scope: SharedMutableReference<MethodScope>) {
     when (statement) {
         is ExpressionStmt -> {
             val expression = statement.expression
-            highlightVisitExpression(expression, blockPath, scope)
+            highlightVisitMethodExpression(linksAcc, expression, blockPath, scope)
         }
 
         is ForStmt -> {
@@ -359,68 +552,68 @@ private fun highlightVisitStatement(statement: Statement, blockPath: Path, scope
             val forScope = ref(scope.reference)
 
             for (expr in initialization) {
-                highlightVisitExpression(expr, blockPath, forScope)
+                highlightVisitMethodExpression(linksAcc, expr, blockPath, forScope)
             }
 
-            highlightVisitStatement(statement.body, blockPath, forScope)
+            highlightVisitStatement(linksAcc, statement.body, blockPath, forScope)
         }
 
         is BlockStmt -> {
-            statement.highlightVisitBlock(blockPath, scope.reference)
+            statement.highlightVisitBlock(linksAcc, blockPath, scope.reference)
         }
 
         is DoStmt -> {
-            highlightVisitStatement(statement.body, blockPath, scope)
-            highlightVisitExpression(statement.condition, blockPath, scope)
+            highlightVisitStatement(linksAcc, statement.body, blockPath, scope)
+            highlightVisitMethodExpression(linksAcc, statement.condition, blockPath, scope)
         }
 
         is ForEachStmt -> {
             val forEachScope = scope.reference.fillScopeByVariables(blockPath, statement.variable.variables)
             val forEachBody = statement.body
 
-            highlightVisitStatement(forEachBody, blockPath, ref(forEachScope))
+            highlightVisitStatement(linksAcc, forEachBody, blockPath, ref(forEachScope))
         }
 
         is IfStmt -> {
-            highlightVisitExpression(statement.condition, blockPath, scope)
-            highlightVisitStatement(statement.thenStmt, blockPath, scope)
-            statement.elseStmt.getOrNull()?.let { highlightVisitStatement(it, blockPath, scope) }
+            highlightVisitMethodExpression(linksAcc, statement.condition, blockPath, scope)
+            highlightVisitStatement(linksAcc, statement.thenStmt, blockPath, scope)
+            statement.elseStmt.getOrNull()?.let { highlightVisitStatement(linksAcc, it, blockPath, scope) }
         }
 
         is ReturnStmt -> {
-            statement.expression.getOrNull()?.let { highlightVisitExpression(it, blockPath, scope) }
+            statement.expression.getOrNull()?.let { highlightVisitMethodExpression(linksAcc, it, blockPath, scope) }
         }
 
         is SwitchStmt -> {
-            highlightVisitExpression(statement.selector, blockPath, scope)
+            highlightVisitMethodExpression(linksAcc, statement.selector, blockPath, scope)
 
             for (entry in statement.entries) {
                 for (label in entry.labels) {
-                    highlightVisitExpression(label, blockPath, scope)
+                    highlightVisitMethodExpression(linksAcc, label, blockPath, scope)
                 }
 
                 for (entryStatement in entry.statements) {
-                    highlightVisitStatement(entryStatement, blockPath, scope)
+                    highlightVisitStatement(linksAcc, entryStatement, blockPath, scope)
                 }
             }
         }
 
         is SynchronizedStmt -> {
-            highlightVisitExpression(statement.expression, blockPath, scope)
-            statement.body.highlightVisitBlock(blockPath, scope.reference)
+            highlightVisitMethodExpression(linksAcc, statement.expression, blockPath, scope)
+            statement.body.highlightVisitBlock(linksAcc, blockPath, scope.reference)
         }
 
         is ThrowStmt -> {
-            highlightVisitExpression(statement.expression, blockPath, scope)
+            highlightVisitMethodExpression(linksAcc, statement.expression, blockPath, scope)
         }
 
         is TryStmt -> {
             val tryScope = ref(scope.reference)
             for (res in statement.resources) {
-                highlightVisitExpression(res, blockPath, tryScope)
+                highlightVisitMethodExpression(linksAcc, res, blockPath, tryScope)
             }
 
-            statement.tryBlock.highlightVisitBlock(blockPath, tryScope.reference)
+            statement.tryBlock.highlightVisitBlock(linksAcc, blockPath, tryScope.reference)
 
             for (catchClause in statement.catchClauses) {
                 val parameterName = catchClause.parameter.name.asString()
@@ -431,46 +624,69 @@ private fun highlightVisitStatement(statement: Statement, blockPath: Path, scope
                     addLocalVar(parameterName, parameterPath, parameterLineNumber)
                 }
 
-                catchClause.body.highlightVisitBlock(blockPath, catchScope)
+                catchClause.body.highlightVisitBlock(linksAcc, blockPath, catchScope)
             }
 
-            statement.finallyBlock.getOrNull()?.highlightVisitBlock(blockPath, tryScope.reference)
+            statement.finallyBlock.getOrNull()?.highlightVisitBlock(linksAcc, blockPath, tryScope.reference)
         }
 
         is WhileStmt -> {
-            highlightVisitExpression(statement.condition, blockPath, scope)
-            highlightVisitStatement(statement.body, blockPath, scope)
+            highlightVisitMethodExpression(linksAcc, statement.condition, blockPath, scope)
+            highlightVisitStatement(linksAcc, statement.body, blockPath, scope)
         }
 
         is YieldStmt -> {
-            highlightVisitExpression(statement.expression, blockPath, scope)
+            highlightVisitMethodExpression(linksAcc, statement.expression, blockPath, scope)
         }
 
         is AssertStmt -> {
-            highlightVisitExpression(statement.check, blockPath, scope)
-            statement.message.getOrNull()?.let { highlightVisitExpression(it, blockPath, scope) }
+            highlightVisitMethodExpression(linksAcc, statement.check, blockPath, scope)
+            statement.message.getOrNull()?.let { highlightVisitMethodExpression(linksAcc, it, blockPath, scope) }
         }
 
         is ExplicitConstructorInvocationStmt -> {
-            statement.expression.getOrNull()?.let { highlightVisitExpression(it, blockPath, scope) }
+            statement.expression.getOrNull()?.let { highlightVisitMethodExpression(linksAcc, it, blockPath, scope) }
             for (arg in statement.arguments) {
-                highlightVisitExpression(arg, blockPath, scope)
+                highlightVisitMethodExpression(linksAcc, arg, blockPath, scope)
             }
         }
     }
 }
 
-private fun BlockStmt.highlightVisitBlock(blockPath: Path, initialScope: MethodScope) {
+private fun BlockStmt.highlightVisitBlock(linksAcc: LinksAccumulator, blockPath: Path, initialScope: MethodScope) {
     val scope = ref(initialScope)
 
     for (statement in statements) {
-        highlightVisitStatement(statement, blockPath, scope)
+        highlightVisitStatement(linksAcc, statement, blockPath, scope)
     }
 }
 
-private fun highlightVisitType(cuScope: CompilationUnitScope, typeDeclaration: TypeDeclaration<*>) {
-    val classScope = typeDeclaration.collectClassScope(cuScope)
+private fun addTypeLink(type: Type, linksAcc: LinksAccumulator, scope: Scope) {
+    val typeRange = type.range.getOrNull()
+    val typeName = (type as? NodeWithSimpleName<*>)?.name?.asString()
+
+    if (typeRange != null && typeName != null) {
+        val variableTypeLink = scope.resolveClass(typeName)
+        if (variableTypeLink != null) linksAcc.add(typeRange, variableTypeLink)
+    }
+}
+
+private fun highlightVisitType(linksAcc: LinksAccumulator, scope: Scope, typeDeclaration: TypeDeclaration<*>) {
+    val classScope = typeDeclaration.collectClassScope(linksAcc, scope)
     val classPath = typeDeclaration.fullyQualifiedName.get().split('.')
+
+    for (field in typeDeclaration.fields) {
+        for (variable in field.variables) {
+            addTypeLink(variable.type, linksAcc, scope)
+
+            val variableInitializer = variable.initializer.getOrNull()
+            if (variableInitializer != null) {
+                val variableName = variable.name.asString()
+                val variablePath = addPathSimpleName(classPath, variableName)
+                highlightVisitExpression(linksAcc, variableInitializer, variablePath, classScope)
+            }
+        }
+    }
 
     for (method in typeDeclaration.methods) {
         val body = method.body.getOrNull()
@@ -487,7 +703,14 @@ private fun highlightVisitType(cuScope: CompilationUnitScope, typeDeclaration: T
                 }
             }
 
-            body.highlightVisitBlock(methodPath, methodScope)
+            val returnType = method.type
+            val returnTypeName = returnType.asString()
+            val returnTypeRange = returnType.range.getOrNull()
+            val returnTypeLink = classScope.resolveClass(returnTypeName)
+
+            if (returnTypeRange != null && returnTypeLink != null) linksAcc.add(returnTypeRange, returnTypeLink)
+
+            body.highlightVisitBlock(linksAcc, methodPath, methodScope)
         }
     }
 
@@ -505,11 +728,11 @@ private fun highlightVisitType(cuScope: CompilationUnitScope, typeDeclaration: T
             }
         }
 
-        body.highlightVisitBlock(constructorPath, constructorScope)
+        body.highlightVisitBlock(linksAcc, constructorPath, constructorScope)
     }
 
     for(nestedType in typeDeclaration.nestedTypes) {
-        highlightVisitType(cuScope, nestedType)
+        highlightVisitType(linksAcc, classScope, nestedType)
     }
 }
 
@@ -523,10 +746,11 @@ fun javaSourceToHighlight(text: String): CodeHighlight {
             logger.error("Some problems was found during parsing source:\n${problemsToString(parseResult.problems)}")
         }
 
-        val cuScope = cu.collectCompilationUnitScope()
+        val linkAcc = LinksAccumulator()
+        val cuScope = cu.collectCompilationUnitScope(linkAcc)
 
         for (typeDeclaration in cu.types) {
-            highlightVisitType(cuScope, typeDeclaration)
+            highlightVisitType(linkAcc, cuScope, typeDeclaration)
         }
 
         val currentLineTokens = mutableListOf<Token>()

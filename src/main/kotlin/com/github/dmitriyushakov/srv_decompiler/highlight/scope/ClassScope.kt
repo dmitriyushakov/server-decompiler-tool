@@ -46,8 +46,10 @@ class ClassScope private constructor(
         fun build(): ClassScope = ClassScope(parentScope, classMap.toMap(), methodMap.toMap(), fieldMap.toMap())
     }
 
-    fun childScopeBuilder(): Builder = Builder(this)
-    fun buildChildScope(actions: Builder.() -> Unit): ClassScope = childScopeBuilder().apply(actions).build()
     fun methodScopeBuilder(): MethodScope.Builder = MethodScope.Builder(this)
     fun buildMethodScope(actions: MethodScope.Builder.() -> Unit): MethodScope = methodScopeBuilder().apply(actions).build()
+
+    companion object {
+        fun buildFrom(parentScope: Scope, actions: Builder.() -> Unit): ClassScope = Builder(parentScope).apply(actions).build()
+    }
 }
