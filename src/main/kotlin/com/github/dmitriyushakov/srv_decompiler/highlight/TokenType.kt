@@ -10,5 +10,9 @@ enum class TokenType {
     BooleanLiteral,
     Operator,
     Spacing,
-    Comment
+    Comment,
+    ClassLink,
+    FieldLink,
+    MethodLink,
+    LocalVarLink
 }

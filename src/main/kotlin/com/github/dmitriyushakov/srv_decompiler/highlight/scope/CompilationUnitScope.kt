@@ -24,7 +24,7 @@ class CompilationUnitScope private constructor(
         private val staticImportsOnDemandConflicts: MutableSet<String> = mutableSetOf()
 
         fun addSingleTypeImport(name: String, path: Path) {
-            Link.fromPath(path)?.let { link ->
+            Link.fromPath(path, LinkType.Class)?.let { link ->
                 singleTypeImports[name] = link
             }
         }
@@ -33,14 +33,14 @@ class CompilationUnitScope private constructor(
             if (name in importsOnDemand) {
                 importsOnDemandConflicts.add(name)
             } else {
-                Link.fromPath(path)?.let { link ->
+                Link.fromPath(path, LinkType.Class)?.let { link ->
                     importsOnDemand[name] = link
                 }
             }
         }
 
         fun addSingleTypeStaticImport(name: String, path: Path) {
-            Link.fromPath(path)?.let { link ->
+            Link.fromPath(path, LinkType.Class)?.let { link ->
                 staticImports[name] = link
             }
         }
@@ -49,7 +49,7 @@ class CompilationUnitScope private constructor(
             if (name in staticImportsOnDemand) {
                 staticImportsOnDemandConflicts.add(name)
             } else {
-                Link.fromPath(path)?.let { link ->
+                Link.fromPath(path, LinkType.Class)?.let { link ->
                     staticImportsOnDemand[name] = link
                 }
             }
@@ -74,6 +74,4 @@ class CompilationUnitScope private constructor(
         fun builder(): Builder = Builder()
         fun build(actions: Builder.() -> Unit): CompilationUnitScope = builder().apply(actions).build()
     }
-
-    fun classScopeBuilder(): ClassScope.Builder = ClassScope.Builder(this)
 }

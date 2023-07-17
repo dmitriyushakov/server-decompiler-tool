@@ -20,6 +20,7 @@ import com.github.javaparser.JavaToken
 import com.github.javaparser.JavaToken.Kind.*
 import com.github.javaparser.Problem
 import com.github.javaparser.Range
+import com.github.javaparser.TokenRange
 import com.github.javaparser.ast.CompilationUnit
 import com.github.javaparser.ast.ImportDeclaration
 import com.github.javaparser.ast.Node
@@ -67,6 +68,7 @@ import com.github.javaparser.ast.stmt.WhileStmt
 import com.github.javaparser.ast.stmt.YieldStmt
 import com.github.javaparser.ast.type.Type
 import org.slf4j.LoggerFactory
+import java.lang.IllegalStateException
 
 private class HighlightParseUtils
 
@@ -272,7 +274,7 @@ private fun CompilationUnitScope.Builder.addSingleImport(linksAcc: LinksAccumula
         addSingleTypeImport(shortName, subjPath)
 
         val range = importDeclaration.name.range.getOrNull()
-        val link = Link.fromPath(subjPath)
+        val link = Link.fromPath(subjPath, LinkType.Class)
 
         if (range != null && link != null) linksAcc.add(range, link)
 
@@ -335,7 +337,7 @@ private fun CompilationUnit.collectCompilationUnitScope(linksAcc: LinksAccumulat
                         added = true
                     }
                     if (added) {
-                        val link = Link.fromPath(subject.path)
+                        val link = Link.fromPath(subject.path, LinkType.Class)
                         val range = importDeclaration.name.range.getOrNull()
 
                         if (link != null && range != null) linksAcc.add(range, link)
@@ -736,6 +738,66 @@ private fun highlightVisitType(linksAcc: LinksAccumulator, scope: Scope, typeDec
     }
 }
 
+private fun <T> Iterator<T>.nextOrNull(): T? = if (hasNext()) next() else null
+
+private fun StringBuilder.flushLinkContents(link: Link?, lineTokens: MutableList<Token>) {
+    if (!isEmpty()) {
+        if (link == null) throw IllegalStateException("Null next link not expected on string builder flushing!")
+        lineTokens.add(LinkedToken(toString(), link))
+        clear()
+    }
+}
+
+private fun processJavaTokens(javaTokens: TokenRange, linksAcc: LinksAccumulator): List<CodeLine> {
+    val currentLineTokens = mutableListOf<Token>()
+    val highlightLines = mutableListOf<CodeLine>()
+
+    val links = linksAcc.links.sortedBy { it.range.begin }.iterator()
+    var nextLink = links.nextOrNull()
+    val currentLinkContents = StringBuilder()
+    val flushLinkContents: () -> Unit = { currentLinkContents.flushLinkContents(nextLink?.link, currentLineTokens) }
+
+    for (javaToken in javaTokens) {
+        if (javaToken.isEndOfLine) {
+            flushLinkContents()
+            val lineNumber = javaToken.range.getOrNull()?.begin?.line
+            highlightLines.add(CodeLine(lineNumber, currentLineTokens.toList()))
+            currentLineTokens.clear()
+        } else {
+            val tokenRange = javaToken.range.getOrNull()
+            val tokenContent = javaToken.text
+            if (nextLink != null && tokenRange != null) {
+                if (nextLink.range.contains(tokenRange)) {
+                    currentLinkContents.append(tokenContent)
+                } else {
+                    flushLinkContents()
+                    val isLink = if (tokenRange.begin.isAfterOrEqual(nextLink.range.end)){
+                        nextLink = links.nextOrNull()
+
+                        if (nextLink != null && nextLink.range.contains(tokenRange)) {
+                            currentLinkContents.append(tokenContent)
+                            true
+                        } else false
+                    } else false
+
+                    if (!isLink) {
+                        currentLineTokens.add(javaToken.toHighlightToken())
+                    }
+                }
+            } else {
+                flushLinkContents()
+                currentLineTokens.add(javaToken.toHighlightToken())
+            }
+        }
+    }
+    flushLinkContents()
+
+    val lastLineNumber = highlightLines.mapNotNull { it.lineNumber }.maxOrNull()?.let { it + 1 }
+    if (currentLineTokens.size > 0) highlightLines.add(CodeLine(lastLineNumber, currentLineTokens.toList()))
+
+    return highlightLines
+}
+
 fun javaSourceToHighlight(text: String): CodeHighlight {
     val javaParser = JavaParser()
     val parseResult = javaParser.parse(text)
@@ -746,26 +808,17 @@ fun javaSourceToHighlight(text: String): CodeHighlight {
             logger.error("Some problems was found during parsing source:\n${problemsToString(parseResult.problems)}")
         }
 
-        val linkAcc = LinksAccumulator()
-        val cuScope = cu.collectCompilationUnitScope(linkAcc)
+        val linksAcc = LinksAccumulator()
+        val cuScope = cu.collectCompilationUnitScope(linksAcc)
 
         for (typeDeclaration in cu.types) {
-            highlightVisitType(linkAcc, cuScope, typeDeclaration)
+            highlightVisitType(linksAcc, cuScope, typeDeclaration)
         }
 
-        val currentLineTokens = mutableListOf<Token>()
-        val highlightLines = mutableListOf<CodeLine>()
+        val javaTokens = cu.tokenRange.getOrNull()
+        if (javaTokens == null) throw IllegalStateException("Not null token range expected from compilation unit")
 
-        for (javaToken in cu.tokenRange.get()) {
-            if (javaToken.isEndOfLine) {
-                highlightLines.add(CodeLine(currentLineTokens.toList()))
-                currentLineTokens.clear()
-            } else {
-                currentLineTokens.add(javaToken.toHighlightToken())
-            }
-        }
-
-        if (currentLineTokens.size > 0) highlightLines.add(CodeLine(currentLineTokens.toList()))
+        val highlightLines = processJavaTokens(javaTokens, linksAcc)
 
         return CodeHighlight(highlightLines)
     } else {

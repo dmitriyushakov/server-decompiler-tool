@@ -26,19 +26,19 @@ class ClassScope private constructor(
         private val fieldMap: MutableMap<String, Link> = mutableMapOf()
 
         fun addClass(name: String, path: Path, lineNumber: Int? = null) {
-            Link.fromPath(path, lineNumber)?.let { link ->
+            Link.fromPath(path, LinkType.Class, lineNumber)?.let { link ->
                 classMap[name] = link
             }
         }
 
         fun addMethod(name: String, path: Path, lineNumber: Int? = null) {
-            Link.fromPath(path, lineNumber)?.let { link ->
+            Link.fromPath(path, LinkType.Method, lineNumber)?.let { link ->
                 methodMap[name] = link
             }
         }
 
         fun addField(name: String, path: Path, lineNumber: Int? = null) {
-            Link.fromPath(path, lineNumber)?.let { link ->
+            Link.fromPath(path, LinkType.Field, lineNumber)?.let { link ->
                 fieldMap[name] = link
             }
         }

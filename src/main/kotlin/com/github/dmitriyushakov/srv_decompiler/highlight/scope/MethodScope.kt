@@ -14,7 +14,7 @@ class MethodScope private constructor(
         private val localVarsMap: MutableMap<String, Link> = mutableMapOf()
 
         fun addLocalVar(name: String, path: Path, lineNumber: Int? = null) {
-            Link.fromPath(path, lineNumber)?.let { link ->
+            Link.fromPath(path, LinkType.LocalVar, lineNumber)?.let { link ->
                 localVarsMap[name] = link
             }
         }
