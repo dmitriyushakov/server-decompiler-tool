@@ -93,6 +93,9 @@ kotlin {
             dependencies {
                 implementation("io.kvision:kvision:$kvisionVersion")
                 implementation("io.kvision:kvision-bootstrap:$kvisionVersion")
+                implementation("io.ktor:ktor-client-core-js:$ktorVersion")
+                implementation("io.ktor:ktor-client-content-negotiation-js:$ktorVersion")
+                implementation("io.ktor:ktor-serialization-kotlinx-json-js:$ktorVersion")
             }
         }
     }
