@@ -26,4 +26,7 @@ class ZipEntryReadingContext(val entryName: String, val archiveStreamContext: Re
             }
         }
     }
+
+    override val readingDataPath: String
+        get() = "${archiveStreamContext.readingDataPath}/$entryName"
 }

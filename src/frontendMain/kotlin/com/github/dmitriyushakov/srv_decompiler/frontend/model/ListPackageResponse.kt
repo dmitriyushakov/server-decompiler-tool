@@ -5,5 +5,5 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class ListPackageResponse(val items: List<Item>) {
     @Serializable
-    data class Item(val name: String, val itemType: ItemType, val haveItemsInside: Boolean)
+    data class Item(val name: String, val itemType: ItemType, val haveItemsInside: Boolean, val sourcePathList: List<String>)
 }

@@ -4,4 +4,6 @@ import java.io.InputStream
 
 interface ReadingContext {
     fun <R> use(actions: (InputStream) -> R): R
+
+    val readingDataPath: String
 }

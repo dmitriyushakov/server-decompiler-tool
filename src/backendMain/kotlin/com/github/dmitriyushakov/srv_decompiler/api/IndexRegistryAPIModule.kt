@@ -41,10 +41,10 @@ fun Application.module() {
                 val haveChild = reg.subjectsIndex.getChildItems(subPath).isNotEmpty()
 
                 if (subjectsList.isEmpty()) {
-                    ListPackageResponse.Item(name, ItemType.Package, haveChild)
+                    ListPackageResponse.Item(name, ItemType.Package, haveChild, emptyList())
                 } else {
                     val itemType = subjectsList.first().itemType
-                    ListPackageResponse.Item(name, itemType, haveChild)
+                    ListPackageResponse.Item(name, itemType, haveChild, subjectsList.map { it.sourcePath })
                 }
             }.let(::ListPackageResponse)
 
@@ -54,12 +54,12 @@ fun Application.module() {
         get("$apiPrefix/$registryPrefix/listOutgoingDeps") {
             val packagePath = call.getPathParam()
 
-            val response = reg.outgoingDependenciesIndex[packagePath].mapNotNull { dep ->
-                val depPath = dep.toPath
-
-                reg.subjectsIndex[depPath].firstOrNull()?.let { subject ->
-                    DependenciesResponse.Item(pathToHumanReadableName(subject.path), pathToString(subject.path), subject.itemType)
-                }
+            val response = reg.outgoingDependenciesIndex[packagePath].flatMap { dep ->
+                reg.subjectsIndex[dep.toPath]
+            }.groupBy { subject ->
+                DependenciesResponse.Item(pathToHumanReadableName(subject.path), pathToString(subject.path), subject.itemType, emptyList())
+            }.map { (group, list) ->
+                DependenciesResponse.Item(group.name, group.path, group.itemType, list.map { it.sourcePath })
             }.let(::DependenciesResponse)
 
             call.respond(response)
@@ -68,12 +68,12 @@ fun Application.module() {
         get("$apiPrefix/$registryPrefix/listIncomingDeps") {
             val packagePath = call.getPathParam()
 
-            val response = reg.incomingDependenciesIndex[packagePath].mapNotNull { dep ->
-                val depPath = dep.fromPath
-
-                reg.subjectsIndex[depPath].firstOrNull()?.let { subject ->
-                    DependenciesResponse.Item(pathToHumanReadableName(subject.path), pathToString(subject.path), subject.itemType)
-                }
+            val response = reg.incomingDependenciesIndex[packagePath].flatMap { dep ->
+                reg.subjectsIndex[dep.toPath]
+            }.groupBy { subject ->
+                DependenciesResponse.Item(pathToHumanReadableName(subject.path), pathToString(subject.path), subject.itemType, emptyList())
+            }.map { (group, list) ->
+                DependenciesResponse.Item(group.name, group.path, group.itemType, list.map { it.sourcePath })
             }.let(::DependenciesResponse)
 
             call.respond(response)
@@ -83,8 +83,10 @@ fun Application.module() {
             val name = call.request.queryParameters["name"]
                 ?: badRequest("Request should have \"name\" query parameter.")
 
-            val response = reg.subjectsIndex.searchForHumanReadableName(name).map { subject ->
-                SubjectSearchResponse.Item(pathToHumanReadableName(subject.path), pathToString(subject.path), subject.itemType)
+            val response = reg.subjectsIndex.searchForHumanReadableName(name).groupBy { subject ->
+                SubjectSearchResponse.Item(pathToHumanReadableName(subject.path), pathToString(subject.path), subject.itemType, emptyList())
+            }.map { (group, list) ->
+                SubjectSearchResponse.Item(group.name, group.path, group.itemType, list.map { it.sourcePath })
             }.let(::SubjectSearchResponse)
 
             call.respond(response)

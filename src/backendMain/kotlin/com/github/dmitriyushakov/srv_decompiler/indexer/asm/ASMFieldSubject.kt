@@ -14,4 +14,5 @@ class ASMFieldSubject(
     override val dependencies: List<Dependency>
 ) : FieldSubject {
     override val childrenSubjects: List<Subject> get() = emptyList()
+    override val sourcePath: String get() = owner.sourcePath
 }

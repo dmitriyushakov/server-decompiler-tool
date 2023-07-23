@@ -4,4 +4,5 @@ interface Subject {
     val path: List<String>
     val dependencies: List<Dependency>
     val childrenSubjects: List<Subject>
+    val sourcePath: String
 }

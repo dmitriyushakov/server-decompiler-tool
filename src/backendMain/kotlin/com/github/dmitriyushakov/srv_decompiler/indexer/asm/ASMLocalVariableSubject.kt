@@ -13,4 +13,5 @@ class ASMLocalVariableSubject(
     override val dependencies: List<Dependency>
 ) : LocalVariableSubject {
     override val childrenSubjects: List<Subject> get() = emptyList()
+    override val sourcePath: String get() = owner.sourcePath
 }

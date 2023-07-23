@@ -74,7 +74,7 @@ private fun IndexRegistry.indexForClass(inputStream: InputStream, readingContext
 
         indexForSubject(classSubject)
     } catch (ex: Exception) {
-        logger.error("Exception occurred during indexing class", ex)
+        logger.error("Exception occurred during indexing class \"${readingContext.readingDataPath}\" - ", ex)
     }
 }
 

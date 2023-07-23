@@ -23,4 +23,5 @@ class ASMClassSubject(
 
     override val fields: MutableList<FieldSubject> = mutableListOf()
     override val methods: MutableList<MethodSubject> = mutableListOf()
+    override val sourcePath: String get() = readingContext.readingDataPath
 }

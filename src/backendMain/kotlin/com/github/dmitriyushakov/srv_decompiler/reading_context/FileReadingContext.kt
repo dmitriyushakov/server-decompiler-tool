@@ -13,4 +13,6 @@ class FileReadingContext(val file: File): ReadingContext {
             BufferedInputStream(fileInputStream).use(actions)
         }
     }
+
+    override val readingDataPath: String get() = file.path
 }

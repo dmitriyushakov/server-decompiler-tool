@@ -14,4 +14,5 @@ class ASMMethodSubject(
     override val dependencies: List<Dependency>
 ) : MethodSubject {
     override val localVariableSubject: MutableList<LocalVariableSubject> = mutableListOf()
+    override val sourcePath: String get() = owner.sourcePath
 }
