@@ -1,0 +1,3 @@
+html, body, div#app, .main-layout, .main-layout > .splitpanel-vertical {
+    height: 100%;
+}
