@@ -94,9 +94,12 @@ kotlin {
                 implementation("io.kvision:kvision:$kvisionVersion")
                 implementation("io.kvision:kvision-bootstrap:$kvisionVersion")
                 implementation("io.kvision:kvision-fontawesome:$kvisionVersion")
+                implementation("io.kvision:kvision-react:$kvisionVersion")
                 implementation("io.ktor:ktor-client-core-js:$ktorVersion")
                 implementation("io.ktor:ktor-client-content-negotiation-js:$ktorVersion")
                 implementation("io.ktor:ktor-serialization-kotlinx-json-js:$ktorVersion")
+
+                implementation(npm("rc-tree", "5.7.12"))
             }
         }
     }

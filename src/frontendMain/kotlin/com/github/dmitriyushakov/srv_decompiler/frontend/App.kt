@@ -1,6 +1,7 @@
 package com.github.dmitriyushakov.srv_decompiler.frontend
 
 import com.github.dmitriyushakov.srv_decompiler.frontend.css.CustomCssModule
+import com.github.dmitriyushakov.srv_decompiler.frontend.css.RCTreeCssModule
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.MainLayout
 import io.kvision.*
 import io.kvision.panel.root
@@ -21,6 +22,7 @@ fun main() {
         BootstrapCssModule,
         CoreModule,
         FontAwesomeModule,
-        CustomCssModule
+        CustomCssModule,
+        RCTreeCssModule
     )
 }
