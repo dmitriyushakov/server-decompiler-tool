@@ -1,3 +1,7 @@
 html, body, div#app, .main-layout, .main-layout > .splitpanel-vertical {
     height: 100%;
 }
+
+.registry-tree {
+    min-width: 400px;
+}

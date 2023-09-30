@@ -1,17 +1,25 @@
 package com.github.dmitriyushakov.srv_decompiler.frontend.ui
 
+import com.github.dmitriyushakov.srv_decompiler.frontend.ui.registry.RegistryTree
+import com.github.dmitriyushakov.srv_decompiler.frontend.ui.registry.registryTree
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.tabs.BasicTab
+import io.kvision.html.button
 import io.kvision.html.div
 import io.kvision.panel.*
 
 class MainLayout: SimplePanel("main-layout") {
-    private lateinit var tabPanelBack: TabPanel
-    val tabPanel: TabPanel get() = tabPanelBack
+    private lateinit var tabPanelInternal: TabPanel
+    private lateinit var registryTreeInternal: RegistryTree
+
+    val registryTree: RegistryTree get() = registryTreeInternal
+    val tabPanel: TabPanel get() = tabPanelInternal
 
     init {
         splitPanel {
-            div("Packages and classes tree would be there")
-            tabPanelBack = tabPanel()
+            div {
+                registryTreeInternal = registryTree()
+            }
+            tabPanelInternal = tabPanel()
         }
     }
 
