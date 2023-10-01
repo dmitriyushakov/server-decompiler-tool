@@ -3,7 +3,6 @@ package com.github.dmitriyushakov.srv_decompiler.frontend.ui
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.registry.RegistryTree
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.registry.registryTree
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.tabs.BasicTab
-import io.kvision.html.button
 import io.kvision.html.div
 import io.kvision.panel.*
 
@@ -25,5 +24,9 @@ class MainLayout: SimplePanel("main-layout") {
 
     fun openTab(tab: BasicTab) {
         tabPanel.tab(label = tab.label, icon = tab.icon, closable = true, init = tab.tabInitializer)
+    }
+
+    val openedTabs: List<BasicTab> get() = tabPanel.getTabs().flatMap { tab ->
+        tab.getChildren().mapNotNull { it as? BasicTab }
     }
 }
