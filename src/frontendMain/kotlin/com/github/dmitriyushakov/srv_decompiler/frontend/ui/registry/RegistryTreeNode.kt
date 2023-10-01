@@ -11,6 +11,7 @@ class RegistryTreeNode(
     val itemType: ItemType,
     val isLeaf: Boolean,
     val path: Path,
+    val sourcePathList: List<String>,
     val children: List<RegistryTreeNode>? = null
 ) {
     fun findByKey(key: String): RegistryTreeNode? {
@@ -32,6 +33,7 @@ class RegistryTreeNode(
             itemType = this.itemType,
             isLeaf = this.isLeaf,
             path = this.path,
+            sourcePathList = this.sourcePathList,
             children = children
         )
     }
@@ -81,6 +83,7 @@ fun ListPackageResponse.Item.toRegistryTreeNode(nodePathPrefix: Path): RegistryT
         title = name,
         itemType = itemType,
         isLeaf = !haveItemsInside,
+        sourcePathList = sourcePathList,
         path = path
     )
 }

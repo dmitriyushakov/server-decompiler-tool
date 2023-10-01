@@ -22,6 +22,7 @@ private fun ItemType.toFAIconClasses(): String = when(this) {
 
 class RegistryTree: SimplePanel("registry-tree") {
     val treeData: ObservableValue<List<RegistryTreeNode>> = ObservableValue(listOf())
+    var onSelect: ((SelectRegistryItemEvent) -> Unit)? = null
 
     private fun ChildrenBuilder.renderTreeNodes(nodesData: List<RegistryTreeNode>) {
         for (node in nodesData) {
@@ -57,6 +58,23 @@ class RegistryTree: SimplePanel("registry-tree") {
                     }
                 }
 
+                onSelect = { keys, event ->
+                    for (key in keys) {
+                        val treeNode = nodesData.findByKey(key)
+                        if (treeNode != null) {
+                            this@RegistryTree.onSelect?.let { handler ->
+                                val event = SelectRegistryItemEvent(
+                                    path = treeNode.path,
+                                    sourcePathList = treeNode.sourcePathList,
+                                    itemType = treeNode.itemType
+                                )
+                                handler(event)
+                            }
+                            break
+                        }
+                    }
+                }
+
                 renderTreeNodes(nodesData)
             }
         }
@@ -70,8 +88,11 @@ class RegistryTree: SimplePanel("registry-tree") {
     }
 }
 
-fun Container.registryTree(): RegistryTree {
+fun Container.registryTree(init: (RegistryTree.() -> Unit)? = null): RegistryTree {
     val tree = RegistryTree()
+    init?.let { init ->
+        tree.init()
+    }
     add(tree)
     return tree
 }

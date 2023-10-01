@@ -23,6 +23,7 @@ external interface TreeProps: PropsWithChildren {
     var showIcon: Boolean
     var showLine: Boolean
     var treeData: Array<dynamic>
+    var onSelect: (Array<String>, dynamic) -> Unit
 }
 
 val Tree: ComponentClass<TreeProps> = require("rc-tree").default
