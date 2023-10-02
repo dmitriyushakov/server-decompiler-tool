@@ -1,5 +1,7 @@
 package com.github.dmitriyushakov.srv_decompiler.frontend.ui
 
+import com.github.dmitriyushakov.srv_decompiler.frontend.model.ItemType
+import com.github.dmitriyushakov.srv_decompiler.frontend.ui.highlight.CodeHighlightTab
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.registry.RegistryTree
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.registry.registryTree
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.tabs.BasicTab
@@ -18,12 +20,27 @@ class MainLayout: SimplePanel("main-layout") {
             div {
                 registryTreeInternal = registryTree()
             }
-            tabPanelInternal = tabPanel()
+            tabPanelInternal = tabPanel(className = "main-layout-tab-panel")
+        }
+
+        registryTree.onSelect = { ev ->
+            if (ev.itemType == ItemType.Class) {
+                val path = ev.path
+                val openedTab = openedTabs.mapNotNull { it as? CodeHighlightTab }.firstOrNull { it.path == path }
+                if (openedTab != null) {
+                    val openedKvTab = tabPanel.findTabWithComponent(openedTab)
+                    tabPanel.activeTab = openedKvTab
+                } else {
+                    val tab = CodeHighlightTab(path, path.lastOrNull())
+                    openTab(tab)
+                }
+            }
         }
     }
 
     fun openTab(tab: BasicTab) {
-        tabPanel.tab(label = tab.label, icon = tab.icon, closable = true, init = tab.tabInitializer)
+        val kvTab = tabPanel.tab(label = tab.label, icon = tab.icon, closable = true, init = tab.tabInitializer)
+        tabPanel.activeTab = kvTab
     }
 
     val openedTabs: List<BasicTab> get() = tabPanel.getTabs().flatMap { tab ->

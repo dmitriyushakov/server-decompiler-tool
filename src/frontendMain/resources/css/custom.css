@@ -5,3 +5,56 @@ html, body, div#app, .main-layout, .main-layout > .splitpanel-vertical {
 .registry-tree {
     min-width: 400px;
 }
+
+.main-layout-tab-panel {
+    display: flex;
+    flex-direction: column;
+}
+
+.main-layout-tab-panel > div {
+    overflow-y: auto;
+}
+
+.code-highlight-view {
+    display: flex;
+}
+
+.code-highlight-view .code-line-number, .code-highlight-view .code-line {
+    height: 18pt;
+}
+
+.code-highlight-view .code-line-numbers > pre, .code-highlight-view .code-lines > pre {
+    overflow: visible;
+}
+
+.code-highlight-view .code-line-numbers {
+    padding-left: 10px;
+    padding-right: 15px;
+    margin-right:5px;
+    background-color: #dbdbdb;
+}
+
+.code-line-token-keyword, .code-line-token-primitive-type, .code-line-token-boolean-literal {
+    color: #000080;
+}
+
+.code-line-token-string-literal {
+    color: #008000;
+}
+
+.code-line-token-number-literal {
+    color: #0000FF;
+}
+
+.code-line-token-operator {
+    font-weight: bold;
+}
+
+.code-line-token-local-var-link, .code-line-token-field-link {
+    color: #660E7A;
+}
+
+.code-highlight-view pre {
+    font-size:12pt;
+    font-family: 'JetBrains Mono NL';
+}

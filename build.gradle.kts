@@ -92,6 +92,7 @@ kotlin {
             resources.srcDir(webDir)
             dependencies {
                 implementation("io.kvision:kvision:$kvisionVersion")
+                implementation("io.kvision:kvision-state:$kvisionVersion")
                 implementation("io.kvision:kvision-bootstrap:$kvisionVersion")
                 implementation("io.kvision:kvision-fontawesome:$kvisionVersion")
                 implementation("io.kvision:kvision-react:$kvisionVersion")
@@ -100,6 +101,7 @@ kotlin {
                 implementation("io.ktor:ktor-serialization-kotlinx-json-js:$ktorVersion")
 
                 implementation(npm("rc-tree", "5.7.12"))
+                implementation(npm("jetbrains-mono", "1.0.6"))
             }
         }
     }
