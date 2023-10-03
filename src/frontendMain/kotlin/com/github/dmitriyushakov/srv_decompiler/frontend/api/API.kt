@@ -61,6 +61,9 @@ object API {
 
         suspend fun searchForName(name: String): SubjectSearchResponse =
             get("$apiPrefix/$registryPrefix/searchForName", mapOf("name" to name))
+
+        suspend fun listAncestors(path: Path): ListAncestorsResponse =
+            get("$apiPrefix/$registryPrefix/listAncestors", mapOf(pathParam(path)))
     }
 
     object Decompiler {

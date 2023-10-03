@@ -1,10 +1,12 @@
 package com.github.dmitriyushakov.srv_decompiler.frontend.ui
 
-import com.github.dmitriyushakov.srv_decompiler.frontend.model.ItemType
+import com.github.dmitriyushakov.srv_decompiler.frontend.model.Path
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.highlight.CodeHighlightTab
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.registry.RegistryTree
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.registry.registryTree
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.tabs.BasicTab
+import com.github.dmitriyushakov.srv_decompiler.frontend.utils.findHighestClassPath
+import com.github.dmitriyushakov.srv_decompiler.frontend.utils.runPromise
 import io.kvision.html.div
 import io.kvision.panel.*
 
@@ -15,6 +17,20 @@ class MainLayout: SimplePanel("main-layout") {
     val registryTree: RegistryTree get() = registryTreeInternal
     val tabPanel: TabPanel get() = tabPanelInternal
 
+    fun openClassForPath(path: Path) {
+        runPromise {
+            val classPath = findHighestClassPath(path) ?: return@runPromise
+            val openedTab = openedTabs.mapNotNull { it as? CodeHighlightTab }.firstOrNull { it.path == classPath }
+            if (openedTab != null) {
+                val openedKvTab = tabPanel.findTabWithComponent(openedTab)
+                tabPanel.activeTab = openedKvTab
+            } else {
+                val tab = CodeHighlightTab(classPath, classPath.lastOrNull())
+                openTab(tab)
+            }
+        }
+    }
+
     init {
         splitPanel {
             div {
@@ -23,19 +39,7 @@ class MainLayout: SimplePanel("main-layout") {
             tabPanelInternal = tabPanel(className = "main-layout-tab-panel")
         }
 
-        registryTree.onSelect = { ev ->
-            if (ev.itemType == ItemType.Class) {
-                val path = ev.path
-                val openedTab = openedTabs.mapNotNull { it as? CodeHighlightTab }.firstOrNull { it.path == path }
-                if (openedTab != null) {
-                    val openedKvTab = tabPanel.findTabWithComponent(openedTab)
-                    tabPanel.activeTab = openedKvTab
-                } else {
-                    val tab = CodeHighlightTab(path, path.lastOrNull())
-                    openTab(tab)
-                }
-            }
-        }
+        registryTree.onSelect = { ev -> openClassForPath(ev.path) }
     }
 
     fun openTab(tab: BasicTab) {

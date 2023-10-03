@@ -1,9 +1,6 @@
 package com.github.dmitriyushakov.srv_decompiler.api
 
-import com.github.dmitriyushakov.srv_decompiler.api.responses.ItemType
-import com.github.dmitriyushakov.srv_decompiler.api.responses.ListPackageResponse
-import com.github.dmitriyushakov.srv_decompiler.api.responses.DependenciesResponse
-import com.github.dmitriyushakov.srv_decompiler.api.responses.SubjectSearchResponse
+import com.github.dmitriyushakov.srv_decompiler.api.responses.*
 import com.github.dmitriyushakov.srv_decompiler.common.constants.apiPrefix
 import com.github.dmitriyushakov.srv_decompiler.indexer.model.*
 import com.github.dmitriyushakov.srv_decompiler.registry.IndexRegistry
@@ -89,6 +86,25 @@ fun Application.module() {
                 SubjectSearchResponse.Item(group.name, group.path, group.itemType, list.map { it.sourcePath })
             }.let(::SubjectSearchResponse)
 
+            call.respond(response)
+        }
+
+        get("$apiPrefix/$registryPrefix/listAncestors") {
+            val path = call.getPathParam()
+            val growingPath: MutableList<String> = mutableListOf()
+            val resultList: MutableList<ListAncestorsResponse.Item> = mutableListOf()
+
+            for (pathPart in path) {
+                growingPath.add(pathPart)
+                val subject = reg.subjectsIndex[growingPath].firstOrNull() ?: continue
+                val itemType = subject.itemType
+                // Get immutable list instance
+                val subjectPath = growingPath.toList()
+
+                resultList.add(ListAncestorsResponse.Item(subjectPath, itemType))
+            }
+
+            val response = ListAncestorsResponse(resultList)
             call.respond(response)
         }
     }
