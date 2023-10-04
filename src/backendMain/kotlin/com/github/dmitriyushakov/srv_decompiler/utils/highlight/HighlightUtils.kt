@@ -18,7 +18,7 @@ fun plainTextToHighlight(text: String): CodeHighlight =
         .split('\n')
         .map { BasicToken(TokenType.Default, it) }
         .mapIndexed { idx, token -> CodeLine(idx + 1, listOf(token)) }
-        .let(::CodeHighlight)
+        .let { CodeHighlight(it, emptyList()) }
 
 fun sourceToHighlight(text: String): CodeHighlight {
     try {

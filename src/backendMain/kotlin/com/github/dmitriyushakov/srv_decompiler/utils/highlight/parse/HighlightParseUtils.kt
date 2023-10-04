@@ -24,6 +24,11 @@ import com.github.javaparser.TokenRange
 import com.github.javaparser.ast.CompilationUnit
 import com.github.javaparser.ast.ImportDeclaration
 import com.github.javaparser.ast.Node
+import com.github.javaparser.ast.NodeList
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration
+import com.github.javaparser.ast.body.ConstructorDeclaration
+import com.github.javaparser.ast.body.FieldDeclaration
+import com.github.javaparser.ast.body.MethodDeclaration
 import com.github.javaparser.ast.body.TypeDeclaration
 import com.github.javaparser.ast.body.VariableDeclarator
 import com.github.javaparser.ast.expr.ArrayAccessExpr
@@ -798,30 +803,89 @@ private fun processJavaTokens(javaTokens: TokenRange, linksAcc: LinksAccumulator
     return highlightLines
 }
 
+private fun <T: Node> List<T>.collectCodeDeclarations(path: Path, declarations: MutableList<CodeDeclaration>) {
+    for (node in this) {
+        when (node) {
+            is ClassOrInterfaceDeclaration -> {
+                val classPath = path + listOf(node.name.asString())
+                val lineNumber = node.lineNumber ?: continue
+                declarations.add(CodeDeclaration(classPath, lineNumber))
+                node.childNodes.collectCodeDeclarations(classPath, declarations)
+            }
+            is FieldDeclaration -> {
+                for (variable in node.variables) {
+                    val variablePath = path + listOf(variable.name.asString())
+                    val lineNumber = variable.lineNumber ?: continue
+                    declarations.add(CodeDeclaration(variablePath, lineNumber))
+                }
+            }
+            is ConstructorDeclaration -> {
+                val constructorPath = path + listOf("<init>")
+                val lineNumber = node.lineNumber ?: continue
+                declarations.add(CodeDeclaration(constructorPath, lineNumber))
+                node.body.statements.collectCodeDeclarations(constructorPath, declarations)
+                for (parameter in node.parameters) {
+                    val parLineNumber = parameter.lineNumber ?: continue
+                    val parPath = constructorPath + listOf(parameter.name.asString())
+                    declarations.add(CodeDeclaration(parPath, parLineNumber))
+                }
+            }
+            is MethodDeclaration -> {
+                val methodPath = path + listOf(node.name.asString())
+                val lineNumber = node.lineNumber ?: continue
+                declarations.add(CodeDeclaration(methodPath, lineNumber))
+                node.body.getOrNull()?.statements?.collectCodeDeclarations(methodPath, declarations)
+                for (parameter in node.parameters) {
+                    val parLineNumber = parameter.lineNumber ?: continue
+                    val parPath = methodPath + listOf(parameter.name.asString())
+                    declarations.add(CodeDeclaration(parPath, parLineNumber))
+                }
+            }
+            is ExpressionStmt -> {
+                val expression = node.expression
+                if (expression is VariableDeclarationExpr) {
+                    for (variable in expression.variables) {
+                        val variablePath = path + listOf(variable.name.asString())
+                        val lineNumber = variable.lineNumber ?: continue
+                        declarations.add(CodeDeclaration(variablePath, lineNumber))
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun CompilationUnit.collectCodeDeclarations(): List<CodeDeclaration> {
+    val declarations: MutableList<CodeDeclaration> = mutableListOf()
+
+    val path: Path = packageDeclaration.get().name.asString().split('.')
+    types.collectCodeDeclarations(path, declarations)
+    declarations.sortBy { it.lineNumber }
+
+    return declarations.distinctBy { it.path }
+}
+
 fun javaSourceToHighlight(text: String): CodeHighlight {
     val javaParser = JavaParser()
     val parseResult = javaParser.parse(text)
-    val cu = parseResult.result.getOrNull()
+    val cu = parseResult.result.getOrNull() ?: throw JavaParserProblemsException(parseResult.problems)
 
-    if (cu != null) {
-        if (!parseResult.isSuccessful) {
-            logger.error("Some problems was found during parsing source:\n${problemsToString(parseResult.problems)}")
-        }
-
-        val linksAcc = LinksAccumulator()
-        val cuScope = cu.collectCompilationUnitScope(linksAcc)
-
-        for (typeDeclaration in cu.types) {
-            highlightVisitType(linksAcc, cuScope, typeDeclaration)
-        }
-
-        val javaTokens = cu.tokenRange.getOrNull()
-        if (javaTokens == null) throw IllegalStateException("Not null token range expected from compilation unit")
-
-        val highlightLines = processJavaTokens(javaTokens, linksAcc)
-
-        return CodeHighlight(highlightLines)
-    } else {
-        throw JavaParserProblemsException(parseResult.problems)
+    if (!parseResult.isSuccessful) {
+        logger.error("Some problems was found during parsing source:\n${problemsToString(parseResult.problems)}")
     }
+
+    val linksAcc = LinksAccumulator()
+    val cuScope = cu.collectCompilationUnitScope(linksAcc)
+
+    for (typeDeclaration in cu.types) {
+        highlightVisitType(linksAcc, cuScope, typeDeclaration)
+    }
+
+    val javaTokens = cu.tokenRange.getOrNull()
+        ?: throw IllegalStateException("Not null token range expected from compilation unit")
+
+    val highlightLines = processJavaTokens(javaTokens, linksAcc)
+    val codeDeclarations = cu.collectCodeDeclarations()
+
+    return CodeHighlight(highlightLines, codeDeclarations)
 }
