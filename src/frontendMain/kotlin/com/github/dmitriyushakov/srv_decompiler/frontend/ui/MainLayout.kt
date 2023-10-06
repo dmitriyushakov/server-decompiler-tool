@@ -21,11 +21,13 @@ class MainLayout: SimplePanel("main-layout") {
         runPromise {
             val classPath = findHighestClassPath(path) ?: return@runPromise
             val openedTab = openedTabs.mapNotNull { it as? CodeHighlightTab }.firstOrNull { it.path == classPath }
+            val highlightObjectPath = if (path == classPath) null else path
             if (openedTab != null) {
                 val openedKvTab = tabPanel.findTabWithComponent(openedTab)
                 tabPanel.activeTab = openedKvTab
+                openedTab.highlightObjectPath = highlightObjectPath
             } else {
-                val tab = CodeHighlightTab(classPath, classPath.lastOrNull())
+                val tab = CodeHighlightTab(classPath, highlightObjectPath, classPath.lastOrNull())
                 openTab(tab)
             }
         }

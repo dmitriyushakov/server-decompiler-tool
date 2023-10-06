@@ -8,24 +8,41 @@ import com.github.dmitriyushakov.srv_decompiler.frontend.utils.runPromise
 import io.kvision.state.ObservableValue
 import io.kvision.state.bind
 
+private class CodeHighlightState(
+    val codeHighlight: CodeHighlight,
+    val lightedLine: Int? = null
+)
+
 class CodeHighlightTab(
     val path: Path,
+    highlightObjectPath: Path?,
     override val label: String? = null
 ): BasicTab("code-highlight-tab") {
     override val icon: String? get() = "fa-solid fa-code"
 
-    val codeHighlight: ObservableValue<CodeHighlight> = ObservableValue(CodeHighlight.empty)
+    private val codeHighlightState: ObservableValue<CodeHighlightState> =
+        ObservableValue(CodeHighlightState(CodeHighlight.empty))
+    var highlightObjectPath: Path? = highlightObjectPath
+        set(value) {
+            field = value
+            val hl = codeHighlightState.getState().codeHighlight
+            val lightedLine = hl.declarations.firstOrNull { it.path == value }?.lineNumber
+            codeHighlightState.setState(CodeHighlightState(hl, lightedLine))
+        }
 
     init {
-        bind(codeHighlight) { hl ->
-            val view = CodeHighlightView(hl)
+        bind(codeHighlightState) { hls ->
+            val hl = hls.codeHighlight
+            val lightedLine = hls.lightedLine
+            val view = CodeHighlightView(hl, lightedLine)
             add(view)
         }
 
         addAfterInsertHook {
             runPromise {
                 val response = API.Decompiler.getHighlightedCode(path, "jd_core")
-                codeHighlight.setState(response)
+                val lightedLine = response.declarations.firstOrNull { it.path == highlightObjectPath }?.lineNumber
+                codeHighlightState.setState(CodeHighlightState(response, lightedLine))
             }
         }
     }

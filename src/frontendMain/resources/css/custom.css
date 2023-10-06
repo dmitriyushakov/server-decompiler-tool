@@ -15,12 +15,40 @@ html, body, div#app, .main-layout, .main-layout > .splitpanel-vertical {
     overflow-y: auto;
 }
 
+.code-highlight-tab {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
 .code-highlight-view {
     display: flex;
+    overflow-y: auto;
+}
+
+.code-highlight-view > div {
+    height: fit-content;
 }
 
 .code-highlight-view .code-line-number, .code-highlight-view .code-line {
     height: 18pt;
+}
+
+.code-highlight-view .code-line-number {
+    padding-left: 10px;
+    padding-right: 15px;
+}
+
+.code-highlight-view .code-line {
+    padding-left:5px;
+}
+
+.code-highlight-view .code-line.code-line-lighted {
+    background-color: #e5faff;
+}
+
+.code-highlight-view .code-line-number.code-line-number-lighted {
+    background-color: #98b2b8;
 }
 
 .code-highlight-view .code-line-numbers > pre, .code-highlight-view .code-lines > pre {
@@ -28,9 +56,6 @@ html, body, div#app, .main-layout, .main-layout > .splitpanel-vertical {
 }
 
 .code-highlight-view .code-line-numbers {
-    padding-left: 10px;
-    padding-right: 15px;
-    margin-right:5px;
     background-color: #dbdbdb;
 }
 
