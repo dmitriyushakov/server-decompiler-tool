@@ -75,11 +75,28 @@ html, body, div#app, .main-layout, .main-layout > .splitpanel-vertical {
     font-weight: bold;
 }
 
-.code-line-token-local-var-link, .code-line-token-field-link {
+.code-line-token-local-var-link:hover, .code-line-token-field-link:hover {
+    color: #A616C7;
+}
+
+.code-line-token-local-var-link, .code-line-token-field-link, .code-line-token-local-var-link:active, .code-line-token-field-link:active {
     color: #660E7A;
 }
 
 .code-highlight-view pre {
     font-size:12pt;
     font-family: 'JetBrains Mono NL';
+}
+
+.code-line-token-class-link, .code-line-token-field-link, .code-line-token-method-link, .code-line-token-local-var-link {
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.code-line-token-class-link:hover, .code-line-token-method-link:hover {
+    color: #5E6A75;
+}
+
+.code-line-token-class-link:active, .code-line-token-method-link:active {
+    color: #212529;
 }

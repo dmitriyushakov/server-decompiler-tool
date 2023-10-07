@@ -18,6 +18,8 @@ class CodeHighlightTab(
     highlightObjectPath: Path?,
     override val label: String? = null
 ): BasicTab("code-highlight-tab") {
+    private var codeHighlightView: CodeHighlightView? = null
+    var onLinkClicked: ((Path) -> Unit)? = null
     override val icon: String? get() = "fa-solid fa-code"
 
     private val codeHighlightState: ObservableValue<CodeHighlightState> =
@@ -34,8 +36,10 @@ class CodeHighlightTab(
         bind(codeHighlightState) { hls ->
             val hl = hls.codeHighlight
             val lightedLine = hls.lightedLine
-            val view = CodeHighlightView(hl, lightedLine)
+            val view = CodeHighlightView(hl, lightedLine, codeHighlightView?.scrollTop)
+            view.onLinkClicked = { onLinkClicked?.invoke(it) }
             add(view)
+            codeHighlightView = view
         }
 
         addAfterInsertHook {

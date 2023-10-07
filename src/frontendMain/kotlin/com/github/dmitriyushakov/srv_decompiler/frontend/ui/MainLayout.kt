@@ -28,6 +28,7 @@ class MainLayout: SimplePanel("main-layout") {
                 openedTab.highlightObjectPath = highlightObjectPath
             } else {
                 val tab = CodeHighlightTab(classPath, highlightObjectPath, classPath.lastOrNull())
+                tab.onLinkClicked = ::openClassForPath
                 openTab(tab)
             }
         }
