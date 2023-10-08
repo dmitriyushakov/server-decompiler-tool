@@ -45,7 +45,7 @@ class CodeHighlightTab(
                     stateObservable.setState(newState)
                 }
 
-                val subjectSourcesSelect = select(options = state.subjectSources.map { it to it }, state.selectedSourcePath)
+                val subjectSourcesSelect = select(options = state.subjectSources.map { it to it }, state.selectedSourcePath, label = "Source path")
 
                 subjectSourcesSelect.onSelectValue { value ->
                     val oldState = stateObservable.getState() ?: return@onSelectValue
