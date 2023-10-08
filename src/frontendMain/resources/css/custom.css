@@ -100,3 +100,20 @@ html, body, div#app, .main-layout, .main-layout > .splitpanel-vertical {
 .code-line-token-class-link:active, .code-line-token-method-link:active {
     color: #212529;
 }
+
+.code-highlight-tab-panel > * {
+    margin-left: 15px;
+    margin-bottom: 5px;
+}
+
+.code-highlight-tab-panel .form-label {
+    margin-bottom: 0px;
+    font-size: 0.8rem;
+}
+
+.code-highlight-tab-panel select.form-select {
+    padding-top: 3px;
+    padding-bottom: 3px;
+    /* height: 20px; */
+    font-size: 0.8rem;
+}

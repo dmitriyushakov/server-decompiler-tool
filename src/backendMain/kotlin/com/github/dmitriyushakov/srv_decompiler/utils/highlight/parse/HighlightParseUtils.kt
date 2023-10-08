@@ -24,7 +24,6 @@ import com.github.javaparser.TokenRange
 import com.github.javaparser.ast.CompilationUnit
 import com.github.javaparser.ast.ImportDeclaration
 import com.github.javaparser.ast.Node
-import com.github.javaparser.ast.NodeList
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration
 import com.github.javaparser.ast.body.ConstructorDeclaration
 import com.github.javaparser.ast.body.FieldDeclaration
@@ -753,6 +752,40 @@ private fun StringBuilder.flushLinkContents(link: Link?, lineTokens: MutableList
     }
 }
 
+private fun List<CodeLine>.splitMultilineTokens(): List<CodeLine> {
+    val newLines: MutableList<CodeLine> = mutableListOf()
+
+    for (line in this) {
+        val newTokens: MutableList<Token> = mutableListOf()
+        var lineNumber = line.lineNumber
+        var isMultiline = false
+
+        for (token in line.tokens) {
+            val splitToken = token.splitMultilineOrNull()
+
+            if (splitToken == null) {
+                newTokens.add(token)
+            } else {
+                isMultiline = true
+                for (subToken in splitToken) {
+                    newTokens.add(subToken)
+                    val newLine = CodeLine(lineNumber, newTokens.toList())
+                    newTokens.clear()
+                    lineNumber = null
+                    newLines.add(newLine)
+                }
+            }
+        }
+
+        if (!isMultiline) {
+            val newLine = CodeLine(lineNumber, newTokens)
+            newLines.add(newLine)
+        }
+    }
+
+    return newLines
+}
+
 private fun processJavaTokens(javaTokens: TokenRange, linksAcc: LinksAccumulator): List<CodeLine> {
     val currentLineTokens = mutableListOf<Token>()
     val highlightLines = mutableListOf<CodeLine>()
@@ -800,7 +833,7 @@ private fun processJavaTokens(javaTokens: TokenRange, linksAcc: LinksAccumulator
     val lastLineNumber = highlightLines.mapNotNull { it.lineNumber }.maxOrNull()?.let { it + 1 }
     if (currentLineTokens.size > 0) highlightLines.add(CodeLine(lastLineNumber, currentLineTokens.toList()))
 
-    return highlightLines
+    return highlightLines.splitMultilineTokens()
 }
 
 private fun <T: Node> List<T>.collectCodeDeclarations(path: Path, declarations: MutableList<CodeDeclaration>) {

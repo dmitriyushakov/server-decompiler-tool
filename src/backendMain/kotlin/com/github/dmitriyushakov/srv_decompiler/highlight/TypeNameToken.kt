@@ -12,4 +12,6 @@ class TypeNameToken(
         .firstOrNull { it.groupType == linkGroupType }
         ?.pathLinks
         ?:emptyList()
+
+    override fun splitMultilineOrNull() = splitMultilineOrNull { TypeNameToken(tokenType, it, links) }
 }

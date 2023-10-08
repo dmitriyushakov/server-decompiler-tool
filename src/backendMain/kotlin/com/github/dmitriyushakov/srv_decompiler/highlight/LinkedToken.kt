@@ -8,4 +8,6 @@ class LinkedToken private constructor(
     val link: Link
 ) : Token() {
     constructor(text: String, link: Link): this(link.linkType.tokenType, text, link)
+
+    override fun splitMultilineOrNull() = splitMultilineOrNull { LinkedToken(tokenType, it, link) }
 }
