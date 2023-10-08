@@ -4,5 +4,7 @@ import com.github.dmitriyushakov.srv_decompiler.frontend.model.DecompilersRespon
 
 class CodeHighlightTabState (
     val decompilers: DecompilersResponse,
-    val selectedDecompiler: String
+    val selectedDecompiler: String,
+    val subjectSources: List<String>,
+    val selectedSourcePath: String?
 )

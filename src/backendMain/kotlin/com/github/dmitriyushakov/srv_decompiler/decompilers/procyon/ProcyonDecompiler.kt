@@ -10,10 +10,10 @@ import com.strobel.decompiler.Decompiler.decompile as decompileByProcyon
 import java.io.StringWriter
 
 object ProcyonDecompiler: Decompiler {
-    override fun decompile(pathIndex: PathIndex<Subject>, path: List<String>): String {
+    override fun decompile(pathIndex: PathIndex<Subject>, path: List<String>, sourcePath: String?): String {
         val internalName = pathToString(path)
         val decompilerSettings = DecompilerSettings.javaDefaults().apply {
-            typeLoader = PathIndexTypeLoader(pathIndex)
+            typeLoader = PathIndexTypeLoader(pathIndex, sourcePath)
             //setPreviewFeaturesEnabled(true)
             includeErrorDiagnostics = false
         }

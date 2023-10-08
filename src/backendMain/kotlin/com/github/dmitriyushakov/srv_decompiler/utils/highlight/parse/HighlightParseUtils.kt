@@ -73,6 +73,7 @@ import com.github.javaparser.ast.stmt.YieldStmt
 import com.github.javaparser.ast.type.Type
 import org.slf4j.LoggerFactory
 import java.lang.IllegalStateException
+import kotlin.jvm.optionals.getOrNull
 
 private class HighlightParseUtils
 
@@ -891,7 +892,10 @@ private fun <T: Node> List<T>.collectCodeDeclarations(path: Path, declarations: 
 fun CompilationUnit.collectCodeDeclarations(): List<CodeDeclaration> {
     val declarations: MutableList<CodeDeclaration> = mutableListOf()
 
-    val path: Path = packageDeclaration.get().name.asString().split('.')
+    val path: Path = packageDeclaration.getOrNull().let {
+        if (it == null) emptyList()
+        else it.name.asString().split('.')
+    }
     types.collectCodeDeclarations(path, declarations)
     declarations.sortBy { it.lineNumber }
 

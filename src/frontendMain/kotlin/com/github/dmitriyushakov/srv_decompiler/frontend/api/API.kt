@@ -64,18 +64,26 @@ object API {
 
         suspend fun listAncestors(path: Path): ListAncestorsResponse =
             get("$apiPrefix/$registryPrefix/listAncestors", mapOf(pathParam(path)))
+
+        suspend fun listSubjectSources(path: Path): SubjectSourcesResponse =
+            get("$apiPrefix/$registryPrefix/listSubjectSources", mapOf(pathParam(path)))
     }
 
     object Decompiler {
         private const val decompilerPrefix = "decompiler"
+        private fun getDecompilerGetParams(path: Path, decompiler: String, sourcePath: String?): Map<String, Any?> =
+            mutableMapOf(pathParam(path), "decompiler" to decompiler).let { params ->
+                if (sourcePath != null) params["source"] = sourcePath
+                params
+            }
 
-        suspend fun getRawCode(path: Path, decompiler: String): String =
-            get("$apiPrefix/$decompilerPrefix/getRawCode", mapOf(pathParam(path), "decompiler" to decompiler))
+        suspend fun getRawCode(path: Path, decompiler: String, sourcePath: String?): String =
+            get("$apiPrefix/$decompilerPrefix/getRawCode", getDecompilerGetParams(path, decompiler, sourcePath))
 
         suspend fun getDecompilersList(): DecompilersResponse =
             get("$apiPrefix/$decompilerPrefix/decompilers", emptyMap())
 
-        suspend fun getHighlightedCode(path: Path, decompiler: String): CodeHighlight =
-            get("$apiPrefix/$decompilerPrefix/getHighlightedCode", mapOf(pathParam(path), "decompiler" to decompiler))
+        suspend fun getHighlightedCode(path: Path, decompiler: String, sourcePath: String?): CodeHighlight =
+            get("$apiPrefix/$decompilerPrefix/getHighlightedCode", getDecompilerGetParams(path, decompiler, sourcePath))
     }
 }

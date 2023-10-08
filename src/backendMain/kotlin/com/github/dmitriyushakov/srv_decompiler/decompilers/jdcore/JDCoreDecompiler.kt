@@ -9,8 +9,8 @@ import org.jd.core.v1.ClassFileToJavaSourceDecompiler
 object JDCoreDecompiler: Decompiler {
     private val decompiler = ClassFileToJavaSourceDecompiler()
 
-    override fun decompile(pathIndex: PathIndex<Subject>, path: List<String>): String {
-        val loader = PathIndexLoader(pathIndex)
+    override fun decompile(pathIndex: PathIndex<Subject>, path: List<String>, sourcePath: String?): String {
+        val loader = PathIndexLoader(pathIndex, sourcePath)
         val printer = JDPrinter()
         val pathStr = pathToString(path)
         decompiler.decompile(loader, printer, pathStr)

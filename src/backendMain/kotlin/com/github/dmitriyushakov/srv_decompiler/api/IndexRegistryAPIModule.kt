@@ -107,5 +107,13 @@ fun Application.module() {
             val response = ListAncestorsResponse(resultList)
             call.respond(response)
         }
+
+        get("$apiPrefix/$registryPrefix/listSubjectSources") {
+            val path = call.getPathParam()
+
+            val sourcesList = reg.subjectsIndex[path].map { it.sourcePath }
+            val response = SubjectSourcesResponse(sourcesList)
+            call.respond(response)
+        }
     }
 }

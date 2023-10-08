@@ -41,7 +41,15 @@ class CodeHighlightTab(
 
                 decompilersSelect.onSelectValue { value ->
                     val oldState = stateObservable.getState() ?: return@onSelectValue
-                    val newState = CodeHighlightTabState(oldState.decompilers, value)
+                    val newState = CodeHighlightTabState(oldState.decompilers, value, oldState.subjectSources, oldState.selectedSourcePath)
+                    stateObservable.setState(newState)
+                }
+
+                val subjectSourcesSelect = select(options = state.subjectSources.map { it to it }, state.selectedSourcePath)
+
+                subjectSourcesSelect.onSelectValue { value ->
+                    val oldState = stateObservable.getState() ?: return@onSelectValue
+                    val newState = CodeHighlightTabState(oldState.decompilers, oldState.selectedDecompiler, oldState.subjectSources, value)
                     stateObservable.setState(newState)
                 }
             }
@@ -52,7 +60,7 @@ class CodeHighlightTab(
             add(view)
 
             runPromise {
-                val response = API.Decompiler.getHighlightedCode(path, state.selectedDecompiler)
+                val response = API.Decompiler.getHighlightedCode(path, state.selectedDecompiler, state.selectedSourcePath)
                 val lightedLine = response.declarations.firstOrNull { it.path == highlightObjectPath }?.lineNumber
                 view.state = CodeHighlightViewState(response, lightedLine)
             }
@@ -63,7 +71,9 @@ class CodeHighlightTab(
                 val decompilers = getDecompilers()
                 val defaultDecompiler = decompilers.decompilers.first().name
 
-                val state = CodeHighlightTabState(decompilers, defaultDecompiler)
+                val subjectSources = API.IndexRegistry.listSubjectSources(path).subjectSources
+
+                val state = CodeHighlightTabState(decompilers, defaultDecompiler, subjectSources, null)
                 stateObservable.setState(state)
             }
         }

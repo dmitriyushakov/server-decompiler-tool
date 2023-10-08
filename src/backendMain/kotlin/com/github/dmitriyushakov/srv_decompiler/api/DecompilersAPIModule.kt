@@ -27,7 +27,9 @@ private fun PipelineContext<Unit, ApplicationCall>.getCode(): String {
     val decompiler = decompilers[decompilerName]
         ?: badRequest("Unable to find \"$decompilerName\" decompiler.")
 
-    val code = decompiler.decompile(reg.subjectsIndex, path)
+    val sourcePath = call.request.queryParameters["source"]
+
+    val code = decompiler.decompile(reg.subjectsIndex, path, sourcePath)
 
     return code
 }

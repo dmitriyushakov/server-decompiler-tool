@@ -7,10 +7,10 @@ import com.github.dmitriyushakov.srv_decompiler.utils.bytecode.pathToString
 import org.benf.cfr.reader.api.CfrDriver
 
 object CFRDecompiler: Decompiler {
-    override fun decompile(pathIndex: PathIndex<Subject>, path: List<String>): String {
+    override fun decompile(pathIndex: PathIndex<Subject>, path: List<String>, sourcePath: String?): String {
         val decompiledJavaSink = DecompiledJavaSink()
         val sinkFactory = CFROutputSinkFactory(decompiledJavaSink)
-        val classFileSource = PathIndexClassFileSource(pathIndex)
+        val classFileSource = PathIndexClassFileSource(pathIndex, sourcePath)
 
         val cfrDriver = CfrDriver
             .Builder()
