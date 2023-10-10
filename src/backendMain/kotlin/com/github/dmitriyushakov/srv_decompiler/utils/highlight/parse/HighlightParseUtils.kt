@@ -1,7 +1,6 @@
 package com.github.dmitriyushakov.srv_decompiler.utils.highlight.parse
 
 import com.github.dmitriyushakov.srv_decompiler.common.SharedMutableReference
-import com.github.dmitriyushakov.srv_decompiler.common.getOrNull
 import com.github.dmitriyushakov.srv_decompiler.common.ref
 import com.github.dmitriyushakov.srv_decompiler.exception.JavaParserProblemsException
 import com.github.dmitriyushakov.srv_decompiler.highlight.*
@@ -54,6 +53,7 @@ import com.github.javaparser.ast.expr.TypeExpr
 import com.github.javaparser.ast.expr.UnaryExpr
 import com.github.javaparser.ast.expr.VariableDeclarationExpr
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName
+import com.github.javaparser.ast.nodeTypes.NodeWithType
 import com.github.javaparser.ast.stmt.AssertStmt
 import com.github.javaparser.ast.stmt.BlockStmt
 import com.github.javaparser.ast.stmt.DoStmt
@@ -70,6 +70,7 @@ import com.github.javaparser.ast.stmt.ThrowStmt
 import com.github.javaparser.ast.stmt.TryStmt
 import com.github.javaparser.ast.stmt.WhileStmt
 import com.github.javaparser.ast.stmt.YieldStmt
+import com.github.javaparser.ast.type.ClassOrInterfaceType
 import com.github.javaparser.ast.type.Type
 import org.slf4j.LoggerFactory
 import java.lang.IllegalStateException
@@ -267,7 +268,6 @@ private fun CompilationUnitScope.Builder.addAsteriskImport(path: Path) {
             }
             if (added) break
         }
-        if (added) break
     }
 }
 
@@ -376,7 +376,7 @@ private fun TypeDeclaration<*>.collectClassScope(linksAcc: LinksAccumulator, par
             val fieldPath = addPathSimpleName(classPath, fieldName)
             val lineNumber = variable.lineNumber
 
-            addField(fieldName, fieldPath, lineNumber)
+            addField(fieldName, fieldPath, variable.getTypePath(parentScope), lineNumber)
         }
     }
 
@@ -397,14 +397,20 @@ private fun TypeDeclaration<*>.collectClassScope(linksAcc: LinksAccumulator, par
     }
 }
 
+private fun NodeWithType<*,*>.getTypePath(scope: Scope): Path? {
+    val name = (type as? NodeWithSimpleName<*>)?.name?.asString()
+    return if (name != null) scope.resolveClass(name)?.path else null
+}
+
 private fun MethodScope.fillScopeByVariables(blockPath: Path, variables: Iterable<VariableDeclarator>): MethodScope {
+    val scope = this
     return buildChild {
         for (variable in variables) {
             val variableName = variable.name.asString()
             val variablePath = addPathSimpleName(blockPath, variableName)
             val variableLineNumber = variable.lineNumber
 
-            addLocalVar(variableName, variablePath, variableLineNumber)
+            addLocalVar(variableName, variablePath, variable.getTypePath(scope), variableLineNumber)
         }
     }
 }
@@ -426,6 +432,16 @@ private fun highlightVisitMethodExpression(linksAcc: LinksAccumulator, expressio
 }
 
 private fun Scope.toMethodScope(): MethodScope = (this as? MethodScope) ?: MethodScope.Builder(this).build()
+
+private fun Expression.solveExpressionType(scope: Scope): Path? =
+    when (this) {
+        is NameExpr -> {
+            val name = name.asString()
+            val nameLink = scope.resolveLocalVariableType(name) ?: scope.resolveFieldType(name) ?: scope.resolveClass(name)
+            nameLink?.path
+        }
+        else -> null
+    }
 
 private fun highlightVisitExpression(linksAcc: LinksAccumulator, expression: Expression, blockPath: Path, scope: Scope) {
     when (expression) {
@@ -478,8 +494,28 @@ private fun highlightVisitExpression(linksAcc: LinksAccumulator, expression: Exp
             highlightVisitStatement(linksAcc, expression.body, blockPath, methodScope)
         }
         is MethodCallExpr -> {
-            expression.scope.getOrNull()?.let { highlightVisitExpression(linksAcc, it, blockPath, scope) }
-            //TODO: scope expression type resolution and method link search
+            expression.scope.getOrNull()?.let {  highlightVisitExpression(linksAcc, it, blockPath, scope) }
+
+            val exprScope = expression.scope.getOrNull()
+            val name = expression.name.asString()
+            val range = expression.range.getOrNull()
+            if (exprScope == null) {
+                val methodLink = scope.resolveMethod(name)
+                if (methodLink != null && range != null) linksAcc.add(range, methodLink)
+            } else {
+                val expressionType = exprScope.solveExpressionType(scope)
+                if (expressionType != null) {
+                    val foundMethod = globalIndexRegistry.subjectsIndex.getChildItems(expressionType).any { (key, subjects) ->
+                        key == name && subjects.any { it is MethodSubject }
+                    }
+                    if (foundMethod) {
+                        val methodPath: Path = expressionType.toMutableList().apply { add(name) }
+                        val methodLink = Link.fromPath(methodPath, LinkType.Method)
+                        if (methodLink != null && range != null) linksAcc.add(range, methodLink)
+                    }
+                }
+            }
+
             for (argument in expression.arguments) {
                 highlightVisitExpression(linksAcc, argument, blockPath, scope)
             }
@@ -493,7 +529,7 @@ private fun highlightVisitExpression(linksAcc: LinksAccumulator, expression: Exp
         }
         is NameExpr -> {
             val name = expression.name.asString()
-            val link = scope.resolveLocalVariable(name) ?: scope.resolveField(name)
+            val link = scope.resolveLocalVariable(name) ?: scope.resolveField(name) ?: scope.resolveClass(name)
             val range = expression.range.getOrNull()
 
             if (range != null && link != null) linksAcc.add(range, link)
@@ -628,7 +664,7 @@ private fun highlightVisitStatement(linksAcc: LinksAccumulator, statement: State
                 val parameterLineNumber = catchClause.parameter.lineNumber
 
                 val catchScope = tryScope.reference.buildChild {
-                    addLocalVar(parameterName, parameterPath, parameterLineNumber)
+                    addLocalVar(parameterName, parameterPath, catchClause.parameter.getTypePath(tryScope.reference), parameterLineNumber)
                 }
 
                 catchClause.body.highlightVisitBlock(linksAcc, blockPath, catchScope)
@@ -706,7 +742,7 @@ private fun highlightVisitType(linksAcc: LinksAccumulator, scope: Scope, typeDec
                     val parameterName = parameter.name.asString()
                     val parameterPath = addPathSimpleName(methodPath, parameterName)
 
-                    addLocalVar(parameterName, parameterPath, parameter.lineNumber)
+                    addLocalVar(parameterName, parameterPath, parameter.getTypePath(classScope), parameter.lineNumber)
                 }
             }
 
@@ -731,7 +767,7 @@ private fun highlightVisitType(linksAcc: LinksAccumulator, scope: Scope, typeDec
                 val parameterName = parameter.name.asString()
                 val parameterPath = addPathSimpleName(constructorPath, parameterName)
 
-                addLocalVar(parameterName, parameterPath, parameter.lineNumber)
+                addLocalVar(parameterName, parameterPath, parameter.getTypePath(classScope), parameter.lineNumber)
             }
         }
 

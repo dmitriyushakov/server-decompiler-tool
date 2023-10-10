@@ -15,7 +15,15 @@ abstract class AbstractScope(
         return parentScope?.resolveField(name)
     }
 
+    override fun resolveFieldType(name: String): Link? {
+        return parentScope?.resolveFieldType(name)
+    }
+
     override fun resolveLocalVariable(name: String): Link? {
         return parentScope?.resolveLocalVariable(name)
+    }
+
+    override fun resolveLocalVariableType(name: String): Link? {
+        return parentScope?.resolveLocalVariableType(name)
     }
 }
