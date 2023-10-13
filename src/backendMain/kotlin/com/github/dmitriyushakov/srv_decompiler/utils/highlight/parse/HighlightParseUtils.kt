@@ -13,6 +13,7 @@ import com.github.dmitriyushakov.srv_decompiler.indexer.model.Subject
 import com.github.dmitriyushakov.srv_decompiler.registry.Path
 import com.github.dmitriyushakov.srv_decompiler.registry.globalIndexRegistry
 import com.github.dmitriyushakov.srv_decompiler.utils.bytecode.addPathSimpleName
+import com.github.dmitriyushakov.srv_decompiler.utils.bytecode.asmGetReturnObjectTypePathFromMethodDescriptor
 import com.github.dmitriyushakov.srv_decompiler.utils.bytecode.getPathShortName
 import com.github.javaparser.JavaParser
 import com.github.javaparser.JavaToken
@@ -70,7 +71,6 @@ import com.github.javaparser.ast.stmt.ThrowStmt
 import com.github.javaparser.ast.stmt.TryStmt
 import com.github.javaparser.ast.stmt.WhileStmt
 import com.github.javaparser.ast.stmt.YieldStmt
-import com.github.javaparser.ast.type.ClassOrInterfaceType
 import com.github.javaparser.ast.type.Type
 import org.slf4j.LoggerFactory
 import java.lang.IllegalStateException
@@ -360,6 +360,9 @@ private fun CompilationUnit.collectCompilationUnitScope(linksAcc: LinksAccumulat
     }
 }
 
+private fun Path.getSubclassPath(subclassName: String): Path =
+    this.subList(0, lastIndex) + listOf(last() + "\$" + subclassName)
+
 private val Node.lineNumber: Int? get() = range.getOrNull()?.begin?.line
 
 private val <T: TypeDeclaration<*>> TypeDeclaration<T>.nestedTypes get(): List<TypeDeclaration<T>> =
@@ -440,6 +443,54 @@ private fun Expression.solveExpressionType(scope: Scope): Path? =
             val nameLink = scope.resolveLocalVariableType(name) ?: scope.resolveFieldType(name) ?: scope.resolveClass(name)
             nameLink?.path
         }
+        is MethodCallExpr -> {
+            val name = name.asString()
+            val exprScope = this.scope.getOrNull()
+
+
+            val methodPath: Path? = if (exprScope == null) {
+                scope.resolveMethod(name)?.path
+            } else {
+                val expressionType = exprScope.solveExpressionType(scope)
+                if (expressionType != null) {
+                    val foundMethod = globalIndexRegistry.subjectsIndex.getChildItems(expressionType).any { (key, subjects) ->
+                        key == name && subjects.any { it is MethodSubject }
+                    }
+                    if (foundMethod) {
+                        expressionType.toMutableList().apply { add(name) }
+                    } else null
+                } else null
+            }
+
+            if (methodPath == null) {
+                null
+            } else {
+                val methodSubject = globalIndexRegistry.subjectsIndex[methodPath].firstNotNullOfOrNull { it as? MethodSubject }
+                methodSubject?.descriptor?.let(::asmGetReturnObjectTypePathFromMethodDescriptor)
+            }
+        }
+        is FieldAccessExpr -> {
+            val name = name.asString()
+            val exprScope = this.scope
+
+            val expressionType = exprScope.solveExpressionType(scope)
+
+            if (expressionType != null) {
+                val foundField = globalIndexRegistry.subjectsIndex.getChildItems(expressionType).any { (key, subjects) ->
+                    key == name && subjects.any { it is FieldSubject }
+                }
+                if (foundField) {
+                    expressionType.toMutableList().apply { add(name) }
+                } else {
+                    val subclassPath = expressionType.getSubclassPath(name)
+                    val subclassFound = globalIndexRegistry.subjectsIndex[subclassPath].any { it is ClassSubject }
+                    if (subclassFound) subclassPath else null
+                }
+            } else null
+        }
+        is ThisExpr -> {
+            scope.resolveThis()?.path
+        }
         else -> null
     }
 
@@ -483,7 +534,29 @@ private fun highlightVisitExpression(linksAcc: LinksAccumulator, expression: Exp
         }
         is FieldAccessExpr -> {
             highlightVisitExpression(linksAcc, expression.scope, blockPath, scope)
-            //TODO: scope expression type resolution and field link search
+
+            val exprScope = expression.scope
+            val name = expression.name.asString()
+            val range = expression.name.range.getOrNull()
+
+            val expressionType = exprScope.solveExpressionType(scope)
+            if (expressionType != null) {
+                val foundField = globalIndexRegistry.subjectsIndex.getChildItems(expressionType).any { (key, subjects) ->
+                    key == name && subjects.any { it is FieldSubject }
+                }
+                if (foundField) {
+                    val fieldPath: Path = expressionType.toMutableList().apply { add(name) }
+                    val fieldLink = Link.fromPath(fieldPath, LinkType.Field)
+                    if (fieldLink != null && range != null) linksAcc.add(range, fieldLink)
+                } else {
+                    val subclassPath = expressionType.getSubclassPath(name)
+                    val subclassFound = globalIndexRegistry.subjectsIndex[subclassPath].any { it is ClassSubject }
+                    if (subclassFound) {
+                        val subclassLink = Link.fromPath(subclassPath, LinkType.Class)
+                        if (subclassLink != null && range != null) linksAcc.add(range, subclassLink)
+                    }
+                }
+            }
         }
         is InstanceOfExpr -> {
             highlightVisitExpression(linksAcc, expression.expression, blockPath, scope)
@@ -498,7 +571,7 @@ private fun highlightVisitExpression(linksAcc: LinksAccumulator, expression: Exp
 
             val exprScope = expression.scope.getOrNull()
             val name = expression.name.asString()
-            val range = expression.range.getOrNull()
+            val range = expression.name.range.getOrNull()
             if (exprScope == null) {
                 val methodLink = scope.resolveMethod(name)
                 if (methodLink != null && range != null) linksAcc.add(range, methodLink)
@@ -615,6 +688,7 @@ private fun highlightVisitStatement(linksAcc: LinksAccumulator, statement: State
             val forEachBody = statement.body
 
             highlightVisitStatement(linksAcc, forEachBody, blockPath, ref(forEachScope))
+            highlightVisitMethodExpression(linksAcc, statement.iterable, blockPath, scope)
         }
 
         is IfStmt -> {
@@ -738,6 +812,8 @@ private fun highlightVisitType(linksAcc: LinksAccumulator, scope: Scope, typeDec
             val methodPath = addPathSimpleName(classPath, methodName)
 
             val methodScope = classScope.buildMethodScope {
+                if (!method.isStatic) setThis(Link.fromPath(classPath, LinkType.Class))
+
                 for (parameter in method.parameters) {
                     val parameterName = parameter.name.asString()
                     val parameterPath = addPathSimpleName(methodPath, parameterName)

@@ -26,4 +26,8 @@ abstract class AbstractScope(
     override fun resolveLocalVariableType(name: String): Link? {
         return parentScope?.resolveLocalVariableType(name)
     }
+
+    override fun resolveThis(): Link? {
+        return parentScope?.resolveThis()
+    }
 }

@@ -7,4 +7,5 @@ interface Scope {
     fun resolveFieldType(name: String): Link?
     fun resolveLocalVariable(name: String): Link?
     fun resolveLocalVariableType(name: String): Link?
+    fun resolveThis(): Link?
 }

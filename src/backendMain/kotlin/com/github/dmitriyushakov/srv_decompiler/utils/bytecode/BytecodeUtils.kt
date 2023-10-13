@@ -57,6 +57,9 @@ fun asmGetObjectTypePathsFromDescriptor(desc: String): List<Path> {
 
 fun asmGetObjectTypePathFromDescriptor(desc: String): Path? = asmGetObjectTypePathsFromDescriptor(desc).firstOrNull()
 
+fun asmGetReturnObjectTypePathFromMethodDescriptor(desc: String): Path? =
+    asmGetObjectTypePathFromDescriptor(asmSplitMethodDescriptors(desc).returnTypeDescriptor)
+
 fun pathToHumanReadableName(path: Path): String = path.joinToString(".")
 fun pathToString(path: Path): String = path.joinToString("/")
 
