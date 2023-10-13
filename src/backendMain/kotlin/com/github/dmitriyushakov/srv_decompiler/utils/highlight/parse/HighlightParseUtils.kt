@@ -6,11 +6,9 @@ import com.github.dmitriyushakov.srv_decompiler.exception.JavaParserProblemsExce
 import com.github.dmitriyushakov.srv_decompiler.highlight.*
 import com.github.dmitriyushakov.srv_decompiler.highlight.TokenType.*
 import com.github.dmitriyushakov.srv_decompiler.highlight.scope.*
-import com.github.dmitriyushakov.srv_decompiler.indexer.model.ClassSubject
-import com.github.dmitriyushakov.srv_decompiler.indexer.model.FieldSubject
-import com.github.dmitriyushakov.srv_decompiler.indexer.model.MethodSubject
-import com.github.dmitriyushakov.srv_decompiler.indexer.model.Subject
+import com.github.dmitriyushakov.srv_decompiler.indexer.model.*
 import com.github.dmitriyushakov.srv_decompiler.registry.Path
+import com.github.dmitriyushakov.srv_decompiler.registry.PathIndex
 import com.github.dmitriyushakov.srv_decompiler.registry.globalIndexRegistry
 import com.github.dmitriyushakov.srv_decompiler.utils.bytecode.addPathSimpleName
 import com.github.dmitriyushakov.srv_decompiler.utils.bytecode.asmGetReturnObjectTypePathFromMethodDescriptor
@@ -24,6 +22,7 @@ import com.github.javaparser.TokenRange
 import com.github.javaparser.ast.CompilationUnit
 import com.github.javaparser.ast.ImportDeclaration
 import com.github.javaparser.ast.Node
+import com.github.javaparser.ast.body.BodyDeclaration
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration
 import com.github.javaparser.ast.body.ConstructorDeclaration
 import com.github.javaparser.ast.body.FieldDeclaration
@@ -368,12 +367,8 @@ private val Node.lineNumber: Int? get() = range.getOrNull()?.begin?.line
 private val <T: TypeDeclaration<*>> TypeDeclaration<T>.nestedTypes get(): List<TypeDeclaration<T>> =
     members.mapNotNull { it as? TypeDeclaration<T> }
 
-private fun TypeDeclaration<*>.collectClassScope(linksAcc: LinksAccumulator, parentScope: Scope): ClassScope = ClassScope.buildFrom(parentScope) {
-    val declaration = this@collectClassScope
-    if (declaration.fullyQualifiedName.isEmpty) return@buildFrom
-    val classPath = declaration.fullyQualifiedName.get().split('.')
-
-    for (field in declaration.fields) {
+private fun List<BodyDeclaration<*>>.collectClassScope(linksAcc: LinksAccumulator, parentScope: Scope, classPath: Path): ClassScope = ClassScope.buildFrom(parentScope) {
+    for (field in mapNotNull { it as? FieldDeclaration }) {
         for (variable in field.variables) {
             val fieldName = variable.name.asString()
             val fieldPath = addPathSimpleName(classPath, fieldName)
@@ -383,7 +378,7 @@ private fun TypeDeclaration<*>.collectClassScope(linksAcc: LinksAccumulator, par
         }
     }
 
-    for (method in declaration.methods) {
+    for (method in mapNotNull { it as? MethodDeclaration }) {
         val methodName = method.name.asString()
         val methodPath = addPathSimpleName(classPath, methodName)
         val lineNumber = method.lineNumber
@@ -391,13 +386,20 @@ private fun TypeDeclaration<*>.collectClassScope(linksAcc: LinksAccumulator, par
         addMethod(methodName, methodPath, lineNumber)
     }
 
-    for (nestedType in declaration.nestedTypes) {
+    for (nestedType in mapNotNull { it as? TypeDeclaration }) {
         val nestedTypeName = nestedType.name.asString()
         val nestedTypePath = addPathSimpleName(classPath, nestedTypeName)
         val lineNumber = nestedType.lineNumber
 
         addClass(nestedTypeName, nestedTypePath, lineNumber)
     }
+}
+
+private fun TypeDeclaration<*>.collectClassScope(linksAcc: LinksAccumulator, parentScope: Scope): ClassScope {
+    if (fullyQualifiedName.isEmpty) return ClassScope.buildFrom(parentScope) {}
+    val classPath = fullyQualifiedName.get().split('.')
+
+    return members.collectClassScope(linksAcc, parentScope, classPath)
 }
 
 private fun NodeWithType<*,*>.getTypePath(scope: Scope): Path? {
@@ -453,12 +455,8 @@ private fun Expression.solveExpressionType(scope: Scope): Path? =
             } else {
                 val expressionType = exprScope.solveExpressionType(scope)
                 if (expressionType != null) {
-                    val foundMethod = globalIndexRegistry.subjectsIndex.getChildItems(expressionType).any { (key, subjects) ->
-                        key == name && subjects.any { it is MethodSubject }
-                    }
-                    if (foundMethod) {
-                        expressionType.toMutableList().apply { add(name) }
-                    } else null
+
+                    globalIndexRegistry.subjectsIndex.iterateClassMethods(expressionType).firstOrNull { it.name == name }?.path
                 } else null
             }
 
@@ -476,11 +474,10 @@ private fun Expression.solveExpressionType(scope: Scope): Path? =
             val expressionType = exprScope.solveExpressionType(scope)
 
             if (expressionType != null) {
-                val foundField = globalIndexRegistry.subjectsIndex.getChildItems(expressionType).any { (key, subjects) ->
-                    key == name && subjects.any { it is FieldSubject }
-                }
-                if (foundField) {
-                    expressionType.toMutableList().apply { add(name) }
+                val fieldSubject = globalIndexRegistry.subjectsIndex.iterateClassFields(expressionType).firstOrNull { it.name == name }
+
+                if (fieldSubject != null) {
+                    fieldSubject.dependencies.firstOrNull { it.type == DependencyType.FieldType }?.toPath
                 } else {
                     val subclassPath = expressionType.getSubclassPath(name)
                     val subclassFound = globalIndexRegistry.subjectsIndex[subclassPath].any { it is ClassSubject }
@@ -491,8 +488,58 @@ private fun Expression.solveExpressionType(scope: Scope): Path? =
         is ThisExpr -> {
             scope.resolveThis()?.path
         }
+        is EnclosedExpr -> {
+            inner.solveExpressionType(scope)
+        }
+        is CastExpr -> {
+            val type = this.type.asString()
+            scope.resolveClass(type)?.path
+        }
         else -> null
     }
+
+private fun PathIndex<Subject>.iterateClassSubjects(classPath: Path): Sequence<Subject> = sequence {
+    val classSubjectsQueue: ArrayDeque<ClassSubject> =
+        get(classPath).mapNotNull { it as? ClassSubject }.let(::ArrayDeque)
+    val visitedClassSubjectPaths: MutableSet<Path> = mutableSetOf()
+    val visitedFieldSubjectPaths: MutableSet<Path> = mutableSetOf()
+    val visitedMethodSubjectPaths: MutableSet<Path> = mutableSetOf()
+
+    while (classSubjectsQueue.isNotEmpty()) {
+        val classSubject = classSubjectsQueue.removeFirst()
+
+        for (child in classSubject.childrenSubjects) {
+            if (child is FieldSubject) {
+                if (child.path !in visitedFieldSubjectPaths) {
+                    visitedFieldSubjectPaths.add(child.path)
+                    yield(child)
+                }
+            } else if (child is MethodSubject) {
+                if (child.path !in visitedMethodSubjectPaths) {
+                    visitedMethodSubjectPaths.add(child.path)
+                    yield(child)
+                }
+            }
+        }
+
+        val upperClasses = classSubject.dependencies.filter { it.type == DependencyType.ClassExtension } +
+                            classSubject.dependencies.filter { it.type == DependencyType.InterfaceImplementation }
+
+        for (dep in upperClasses) {
+            val depPath = dep.toPath
+            if (depPath !in visitedClassSubjectPaths) {
+                visitedClassSubjectPaths.add(depPath)
+                classSubjectsQueue.addAll(get(depPath).mapNotNull { it as? ClassSubject })
+            }
+        }
+    }
+}
+
+private fun PathIndex<Subject>.iterateClassMethods(classPath: Path): Sequence<MethodSubject> =
+    iterateClassSubjects(classPath).mapNotNull { it as? MethodSubject }
+
+private fun PathIndex<Subject>.iterateClassFields(classPath: Path): Sequence<FieldSubject> =
+    iterateClassSubjects(classPath).mapNotNull { it as? FieldSubject }
 
 private fun highlightVisitExpression(linksAcc: LinksAccumulator, expression: Expression, blockPath: Path, scope: Scope) {
     when (expression) {
@@ -541,11 +588,10 @@ private fun highlightVisitExpression(linksAcc: LinksAccumulator, expression: Exp
 
             val expressionType = exprScope.solveExpressionType(scope)
             if (expressionType != null) {
-                val foundField = globalIndexRegistry.subjectsIndex.getChildItems(expressionType).any { (key, subjects) ->
-                    key == name && subjects.any { it is FieldSubject }
-                }
-                if (foundField) {
-                    val fieldPath: Path = expressionType.toMutableList().apply { add(name) }
+                val fieldSubject = globalIndexRegistry.subjectsIndex.iterateClassFields(expressionType).firstOrNull { it.name == name }
+
+                if (fieldSubject != null) {
+                    val fieldPath: Path = fieldSubject.path
                     val fieldLink = Link.fromPath(fieldPath, LinkType.Field)
                     if (fieldLink != null && range != null) linksAcc.add(range, fieldLink)
                 } else {
@@ -572,20 +618,16 @@ private fun highlightVisitExpression(linksAcc: LinksAccumulator, expression: Exp
             val exprScope = expression.scope.getOrNull()
             val name = expression.name.asString()
             val range = expression.name.range.getOrNull()
-            if (exprScope == null) {
-                val methodLink = scope.resolveMethod(name)
-                if (methodLink != null && range != null) linksAcc.add(range, methodLink)
-            } else {
-                val expressionType = exprScope.solveExpressionType(scope)
-                if (expressionType != null) {
-                    val foundMethod = globalIndexRegistry.subjectsIndex.getChildItems(expressionType).any { (key, subjects) ->
-                        key == name && subjects.any { it is MethodSubject }
-                    }
-                    if (foundMethod) {
-                        val methodPath: Path = expressionType.toMutableList().apply { add(name) }
-                        val methodLink = Link.fromPath(methodPath, LinkType.Method)
-                        if (methodLink != null && range != null) linksAcc.add(range, methodLink)
-                    }
+
+            val expressionType = if (exprScope != null) exprScope.solveExpressionType(scope) else scope.resolveThis()?.path
+
+            if (expressionType != null) {
+                val methodSubject = globalIndexRegistry.subjectsIndex.iterateClassMethods(expressionType).firstOrNull { it.name == name }
+
+                if (methodSubject != null) {
+                    val methodPath: Path = methodSubject.path
+                    val methodLink = Link.fromPath(methodPath, LinkType.Method)
+                    if (methodLink != null && range != null) linksAcc.add(range, methodLink)
                 }
             }
 
@@ -615,6 +657,17 @@ private fun highlightVisitExpression(linksAcc: LinksAccumulator, expression: Exp
             }
             for (argument in expression.arguments) {
                 highlightVisitExpression(linksAcc, argument, blockPath, scope)
+            }
+            val body = expression.anonymousClassBody.getOrNull()
+            if (body != null) {
+                val classPath = scope.resolveThis()?.path?.let {
+                    //TODO: make variable suffix
+                    it.subList(0, it.lastIndex) + listOf(it.last() + "$0")
+                }
+                if (classPath != null) {
+                    val classScope = body.collectClassScope(linksAcc, scope, classPath)
+                    body.highlightBodyDeclarations(linksAcc, scope, classScope, classPath)
+                }
             }
         }
         is SuperExpr -> {
@@ -788,11 +841,8 @@ private fun addTypeLink(type: Type, linksAcc: LinksAccumulator, scope: Scope) {
     }
 }
 
-private fun highlightVisitType(linksAcc: LinksAccumulator, scope: Scope, typeDeclaration: TypeDeclaration<*>) {
-    val classScope = typeDeclaration.collectClassScope(linksAcc, scope)
-    val classPath = typeDeclaration.fullyQualifiedName.get().split('.')
-
-    for (field in typeDeclaration.fields) {
+private fun List<BodyDeclaration<*>>.highlightBodyDeclarations(linksAcc: LinksAccumulator, scope: Scope, classScope: ClassScope, classPath: Path) {
+    for (field in mapNotNull { it as? FieldDeclaration }) {
         for (variable in field.variables) {
             addTypeLink(variable.type, linksAcc, scope)
 
@@ -805,7 +855,7 @@ private fun highlightVisitType(linksAcc: LinksAccumulator, scope: Scope, typeDec
         }
     }
 
-    for (method in typeDeclaration.methods) {
+    for (method in mapNotNull { it as? MethodDeclaration }) {
         val body = method.body.getOrNull()
         if (body != null) {
             val methodName = method.name.asString()
@@ -819,6 +869,7 @@ private fun highlightVisitType(linksAcc: LinksAccumulator, scope: Scope, typeDec
                     val parameterPath = addPathSimpleName(methodPath, parameterName)
 
                     addLocalVar(parameterName, parameterPath, parameter.getTypePath(classScope), parameter.lineNumber)
+                    addTypeLink(parameter.type, linksAcc, classScope)
                 }
             }
 
@@ -833,26 +884,36 @@ private fun highlightVisitType(linksAcc: LinksAccumulator, scope: Scope, typeDec
         }
     }
 
-    for (constructor in typeDeclaration.constructors) {
+    for (constructor in mapNotNull { it as? ConstructorDeclaration }) {
         val constructorName = if (constructor.isStatic) "<clinit>" else "<init>"
         val constructorPath = addPathSimpleName(classPath, constructorName)
         val body = constructor.body
 
         val constructorScope = classScope.buildMethodScope {
+            setThis(Link.fromPath(classPath, LinkType.Class))
+
             for (parameter in constructor.parameters) {
                 val parameterName = parameter.name.asString()
                 val parameterPath = addPathSimpleName(constructorPath, parameterName)
 
                 addLocalVar(parameterName, parameterPath, parameter.getTypePath(classScope), parameter.lineNumber)
+                addTypeLink(parameter.type, linksAcc, classScope)
             }
         }
 
         body.highlightVisitBlock(linksAcc, constructorPath, constructorScope)
     }
 
-    for(nestedType in typeDeclaration.nestedTypes) {
+    for(nestedType in mapNotNull { it as? TypeDeclaration }) {
         highlightVisitType(linksAcc, classScope, nestedType)
     }
+}
+
+private fun highlightVisitType(linksAcc: LinksAccumulator, scope: Scope, typeDeclaration: TypeDeclaration<*>) {
+    val classScope = typeDeclaration.collectClassScope(linksAcc, scope)
+    val classPath = typeDeclaration.fullyQualifiedName.get().split('.')
+
+    typeDeclaration.members.highlightBodyDeclarations(linksAcc, scope, classScope, classPath)
 }
 
 private fun <T> Iterator<T>.nextOrNull(): T? = if (hasNext()) next() else null
