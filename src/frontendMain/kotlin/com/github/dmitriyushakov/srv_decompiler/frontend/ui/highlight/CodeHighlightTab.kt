@@ -66,16 +66,14 @@ class CodeHighlightTab(
             }
         }
 
-        addAfterInsertHook {
-            runPromise {
-                val decompilers = getDecompilers()
-                val defaultDecompiler = decompilers.decompilers.first().name
+        runPromise {
+            val decompilers = getDecompilers()
+            val defaultDecompiler = decompilers.decompilers.first().name
 
-                val subjectSources = API.IndexRegistry.listSubjectSources(path).subjectSources
+            val subjectSources = API.IndexRegistry.listSubjectSources(path).subjectSources
 
-                val state = CodeHighlightTabState(decompilers, defaultDecompiler, subjectSources, null)
-                stateObservable.setState(state)
-            }
+            val state = CodeHighlightTabState(decompilers, defaultDecompiler, subjectSources, null)
+            stateObservable.setState(state)
         }
     }
 }

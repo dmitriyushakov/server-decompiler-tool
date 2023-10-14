@@ -34,6 +34,8 @@ private fun TokenType.toClasses(): String = tokenTypeClassesSuffixMap.get(this).
 }
 
 class CodeHighlightView(): SimplePanel("code-highlight-view") {
+    private var lastScrollPosition: Double? = null
+    private var lastScrollPositionX: Double? = null
     private val stateObservable: ObservableValue<CodeHighlightViewState> = ObservableValue(CodeHighlightViewState(CodeHighlight.empty, null))
 
     var state: CodeHighlightViewState
@@ -98,13 +100,25 @@ class CodeHighlightView(): SimplePanel("code-highlight-view") {
 
             val lightedLineDiv = varLightedLineDiv
 
-            if (lightedLineDiv != null) {
+            if (lightedLineDiv != null && lastScrollPosition == null) {
                 lightedLineDiv.addAfterInsertHook {
                     val containerElement = getElement()
                     val lightedLineElement = lightedLineDiv.getElement()
 
                     scrollToLine(containerElement, lightedLineElement)
                 }
+            }
+
+            addAfterInsertHook {
+                println("lastScrollPosition = $lastScrollPosition")
+                lastScrollPosition ?.let { lastScrollPosition -> getElement()?.scroll(lastScrollPositionX ?: 0.0, lastScrollPosition) }
+                lastScrollPosition = null
+                lastScrollPositionX = null
+            }
+
+            addAfterDestroyHook {
+                lastScrollPosition = getElement()?.scrollTop
+                lastScrollPositionX = getElement()?.scrollLeft
             }
         }
     }
