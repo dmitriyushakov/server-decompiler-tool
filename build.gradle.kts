@@ -25,7 +25,7 @@ val ktorVersion: String by System.getProperties()
 val logbackVersion: String by project
 
 val webDir = file("src/frontendMain/web")
-val mainClassName = "io.ktor.server.netty.EngineMain"
+val mainClassName = "com.github.dmitriyushakov.srv_decompiler.cli.MainKt"
 
 
 kotlin {
@@ -86,6 +86,8 @@ kotlin {
                 implementation("org.bitbucket.mstrobel:procyon-compilertools:0.6.0")
 
                 implementation("com.github.javaparser:javaparser-core-serialization:3.25.2")
+
+                implementation("org.jetbrains.kotlinx:kotlinx-cli:0.3.6")
             }
         }
         val frontendMain by getting {
