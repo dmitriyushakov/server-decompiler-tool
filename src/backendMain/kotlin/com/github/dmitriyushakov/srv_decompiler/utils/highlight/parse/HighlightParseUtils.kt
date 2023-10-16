@@ -242,15 +242,30 @@ fun problemsToString(problems: List<Problem>): String {
 
 private class LinksAccumulator {
     val links: MutableList<LinkItem> = mutableListOf()
+    val typePaths: MutableList<TypePathItem> = mutableListOf()
+    val metaItems: List<MetaInfoItem> get() = (links + typePaths).sortedBy { it.range.begin }
 
-    fun add(range: Range, link: Link) {
+    fun addLink(range: Range, link: Link) {
         links.add(LinkItem(range, link))
     }
 
+    fun addTypePath(range: Range, typePath: Path) {
+        typePaths.add(TypePathItem(range, typePath))
+    }
+
+    interface MetaInfoItem {
+        val range: Range
+    }
+
     data class LinkItem(
-        val range: Range,
+        override val range: Range,
         val link: Link
-    )
+    ): MetaInfoItem
+
+    data class TypePathItem(
+        override val range: Range,
+        val typePath: Path
+    ): MetaInfoItem
 }
 
 private fun CompilationUnitScope.Builder.addAsteriskImport(path: Path) {
@@ -280,7 +295,7 @@ private fun CompilationUnitScope.Builder.addSingleImport(linksAcc: LinksAccumula
         val range = importDeclaration.name.range.getOrNull()
         val link = Link.fromPath(subjPath, LinkType.Class)
 
-        if (range != null && link != null) linksAcc.add(range, link)
+        if (range != null && link != null) linksAcc.addLink(range, link)
 
         added = true
     }
@@ -344,7 +359,7 @@ private fun CompilationUnit.collectCompilationUnitScope(linksAcc: LinksAccumulat
                         val link = Link.fromPath(subject.path, LinkType.Class)
                         val range = importDeclaration.name.range.getOrNull()
 
-                        if (link != null && range != null) linksAcc.add(range, link)
+                        if (link != null && range != null) linksAcc.addLink(range, link)
                         break
                     }
                 }
@@ -593,13 +608,13 @@ private fun highlightVisitExpression(linksAcc: LinksAccumulator, expression: Exp
                 if (fieldSubject != null) {
                     val fieldPath: Path = fieldSubject.path
                     val fieldLink = Link.fromPath(fieldPath, LinkType.Field)
-                    if (fieldLink != null && range != null) linksAcc.add(range, fieldLink)
+                    if (fieldLink != null && range != null) linksAcc.addLink(range, fieldLink)
                 } else {
                     val subclassPath = expressionType.getSubclassPath(name)
                     val subclassFound = globalIndexRegistry.subjectsIndex[subclassPath].any { it is ClassSubject }
                     if (subclassFound) {
                         val subclassLink = Link.fromPath(subclassPath, LinkType.Class)
-                        if (subclassLink != null && range != null) linksAcc.add(range, subclassLink)
+                        if (subclassLink != null && range != null) linksAcc.addLink(range, subclassLink)
                     }
                 }
             }
@@ -627,7 +642,7 @@ private fun highlightVisitExpression(linksAcc: LinksAccumulator, expression: Exp
                 if (methodSubject != null) {
                     val methodPath: Path = methodSubject.path
                     val methodLink = Link.fromPath(methodPath, LinkType.Method)
-                    if (methodLink != null && range != null) linksAcc.add(range, methodLink)
+                    if (methodLink != null && range != null) linksAcc.addLink(range, methodLink)
                 }
             }
 
@@ -647,7 +662,7 @@ private fun highlightVisitExpression(linksAcc: LinksAccumulator, expression: Exp
             val link = scope.resolveLocalVariable(name) ?: scope.resolveField(name) ?: scope.resolveClass(name)
             val range = expression.range.getOrNull()
 
-            if (range != null && link != null) linksAcc.add(range, link)
+            if (range != null && link != null) linksAcc.addLink(range, link)
         }
         is ObjectCreationExpr -> {
             expression.scope.getOrNull()?.let { highlightVisitExpression(linksAcc, expression, blockPath, scope) }
@@ -676,7 +691,7 @@ private fun highlightVisitExpression(linksAcc: LinksAccumulator, expression: Exp
                 val typeLink = typeName.asString().let { scope.resolveClass(it) }
                 val typeRange = typeName.range.getOrNull()
 
-                if (typeLink != null && typeRange != null) linksAcc.add(typeRange, typeLink)
+                if (typeLink != null && typeRange != null) linksAcc.addLink(typeRange, typeLink)
             }
         }
         is SwitchExpr -> {
@@ -698,7 +713,7 @@ private fun highlightVisitExpression(linksAcc: LinksAccumulator, expression: Exp
                 val typeLink = typeName.asString().let { scope.resolveClass(it) }
                 val typeRange = typeName.range.getOrNull()
 
-                if (typeLink != null && typeRange != null) linksAcc.add(typeRange, typeLink)
+                if (typeLink != null && typeRange != null) linksAcc.addLink(typeRange, typeLink)
             }
         }
         is TypeExpr -> {
@@ -837,7 +852,7 @@ private fun addTypeLink(type: Type, linksAcc: LinksAccumulator, scope: Scope) {
 
     if (typeRange != null && typeName != null) {
         val variableTypeLink = scope.resolveClass(typeName)
-        if (variableTypeLink != null) linksAcc.add(typeRange, variableTypeLink)
+        if (variableTypeLink != null) linksAcc.addLink(typeRange, variableTypeLink)
     }
 }
 
@@ -845,11 +860,13 @@ private fun List<BodyDeclaration<*>>.highlightBodyDeclarations(linksAcc: LinksAc
     for (field in mapNotNull { it as? FieldDeclaration }) {
         for (variable in field.variables) {
             addTypeLink(variable.type, linksAcc, scope)
+            val variableNameRange = variable.name.range.getOrNull()
+            val variableName = variable.name.asString()
+            val variablePath = addPathSimpleName(classPath, variableName)
+            if (variableNameRange != null) linksAcc.addTypePath(variableNameRange, variablePath)
 
             val variableInitializer = variable.initializer.getOrNull()
             if (variableInitializer != null) {
-                val variableName = variable.name.asString()
-                val variablePath = addPathSimpleName(classPath, variableName)
                 highlightVisitExpression(linksAcc, variableInitializer, variablePath, classScope)
             }
         }
@@ -858,8 +875,10 @@ private fun List<BodyDeclaration<*>>.highlightBodyDeclarations(linksAcc: LinksAc
     for (method in mapNotNull { it as? MethodDeclaration }) {
         val body = method.body.getOrNull()
         if (body != null) {
+            val methodNameRange = method.name.range.getOrNull()
             val methodName = method.name.asString()
             val methodPath = addPathSimpleName(classPath, methodName)
+            if (methodNameRange != null) linksAcc.addTypePath(methodNameRange, methodPath)
 
             val methodScope = classScope.buildMethodScope {
                 if (!method.isStatic) setThis(Link.fromPath(classPath, LinkType.Class))
@@ -878,7 +897,7 @@ private fun List<BodyDeclaration<*>>.highlightBodyDeclarations(linksAcc: LinksAc
             val returnTypeRange = returnType.range.getOrNull()
             val returnTypeLink = classScope.resolveClass(returnTypeName)
 
-            if (returnTypeRange != null && returnTypeLink != null) linksAcc.add(returnTypeRange, returnTypeLink)
+            if (returnTypeRange != null && returnTypeLink != null) linksAcc.addLink(returnTypeRange, returnTypeLink)
 
             body.highlightVisitBlock(linksAcc, methodPath, methodScope)
         }
@@ -912,6 +931,8 @@ private fun List<BodyDeclaration<*>>.highlightBodyDeclarations(linksAcc: LinksAc
 private fun highlightVisitType(linksAcc: LinksAccumulator, scope: Scope, typeDeclaration: TypeDeclaration<*>) {
     val classScope = typeDeclaration.collectClassScope(linksAcc, scope)
     val classPath = typeDeclaration.fullyQualifiedName.get().split('.')
+    val nameRange = typeDeclaration.name.range.getOrNull()
+    if (nameRange != null) linksAcc.addTypePath(nameRange, classPath)
 
     typeDeclaration.members.highlightBodyDeclarations(linksAcc, scope, classScope, classPath)
 }
@@ -922,6 +943,14 @@ private fun StringBuilder.flushLinkContents(link: Link?, lineTokens: MutableList
     if (!isEmpty()) {
         if (link == null) throw IllegalStateException("Null next link not expected on string builder flushing!")
         lineTokens.add(LinkedToken(toString(), link))
+        clear()
+    }
+}
+
+private fun StringBuilder.flushTypePathContents(typePath: Path?, lineTokens: MutableList<Token>) {
+    if (!isEmpty()) {
+        if (typePath == null) throw IllegalStateException("Null next link not expected on string builder flushing!")
+        lineTokens.add(TypeNameToken(Default, toString(), typePath))
         clear()
     }
 }
@@ -964,30 +993,35 @@ private fun processJavaTokens(javaTokens: TokenRange, linksAcc: LinksAccumulator
     val currentLineTokens = mutableListOf<Token>()
     val highlightLines = mutableListOf<CodeLine>()
 
-    val links = linksAcc.links.sortedBy { it.range.begin }.iterator()
-    var nextLink = links.nextOrNull()
-    val currentLinkContents = StringBuilder()
-    val flushLinkContents: () -> Unit = { currentLinkContents.flushLinkContents(nextLink?.link, currentLineTokens) }
+    val nextItemIter = linksAcc.metaItems.iterator()
+    var nextItem = nextItemIter.nextOrNull()
+    val currentContents = StringBuilder()
+    val flushContents: () -> Unit = {
+        nextItem.let { item ->
+            if (item is LinksAccumulator.LinkItem) currentContents.flushLinkContents(item.link, currentLineTokens)
+            else if (item is LinksAccumulator.TypePathItem) currentContents.flushTypePathContents(item.typePath, currentLineTokens)
+        }
+    }
 
     for (javaToken in javaTokens) {
         if (javaToken.isEndOfLine) {
-            flushLinkContents()
+            flushContents()
             val lineNumber = javaToken.range.getOrNull()?.begin?.line
             highlightLines.add(CodeLine(lineNumber, currentLineTokens.toList()))
             currentLineTokens.clear()
         } else {
             val tokenRange = javaToken.range.getOrNull()
             val tokenContent = javaToken.text
-            if (nextLink != null && tokenRange != null) {
-                if (nextLink.range.contains(tokenRange)) {
-                    currentLinkContents.append(tokenContent)
+            if (nextItem != null && tokenRange != null) {
+                if (nextItem.range.contains(tokenRange)) {
+                    currentContents.append(tokenContent)
                 } else {
-                    flushLinkContents()
-                    val isLink = if (tokenRange.begin.isAfterOrEqual(nextLink.range.end)){
-                        nextLink = links.nextOrNull()
+                    flushContents()
+                    val isLink = if (tokenRange.begin.isAfterOrEqual(nextItem.range.end)){
+                        nextItem = nextItemIter.nextOrNull()
 
-                        if (nextLink != null && nextLink.range.contains(tokenRange)) {
-                            currentLinkContents.append(tokenContent)
+                        if (nextItem != null && nextItem.range.contains(tokenRange)) {
+                            currentContents.append(tokenContent)
                             true
                         } else false
                     } else false
@@ -997,12 +1031,12 @@ private fun processJavaTokens(javaTokens: TokenRange, linksAcc: LinksAccumulator
                     }
                 }
             } else {
-                flushLinkContents()
+                flushContents()
                 currentLineTokens.add(javaToken.toHighlightToken())
             }
         }
     }
-    flushLinkContents()
+    flushContents()
 
     val lastLineNumber = highlightLines.mapNotNull { it.lineNumber }.maxOrNull()?.let { it + 1 }
     if (currentLineTokens.size > 0) highlightLines.add(CodeLine(lastLineNumber, currentLineTokens.toList()))
