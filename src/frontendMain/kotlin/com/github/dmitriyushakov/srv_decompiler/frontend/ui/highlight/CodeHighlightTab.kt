@@ -9,6 +9,7 @@ import com.github.dmitriyushakov.srv_decompiler.frontend.ui.tabs.BasicTab
 import com.github.dmitriyushakov.srv_decompiler.frontend.utils.*
 import io.kvision.dropdown.ContextMenu
 import io.kvision.dropdown.ddLink
+import io.kvision.dropdown.ddLinkDisabled
 import io.kvision.dropdown.dropDown
 import io.kvision.form.select.select
 import io.kvision.panel.hPanel
@@ -39,6 +40,9 @@ class CodeHighlightTab(
                             }
                         }
                     }
+                    if (state.incomingRefs.isEmpty()) {
+                        ddLinkDisabled("No references")
+                    }
                 }
                 dropDown("Outgoing references", forDropDown = true) {
                     for ((type, refs) in state.outgoingRefs) {
@@ -52,6 +56,9 @@ class CodeHighlightTab(
                                 }
                             }
                         }
+                    }
+                    if (state.outgoingRefs.isEmpty()) {
+                        ddLinkDisabled("No references")
                     }
                 }
             }
