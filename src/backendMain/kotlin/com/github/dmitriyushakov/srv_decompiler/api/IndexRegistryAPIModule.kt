@@ -52,11 +52,13 @@ fun Application.module() {
             val packagePath = call.getPathParam()
 
             val response = reg.outgoingDependenciesIndex[packagePath].flatMap { dep ->
-                reg.subjectsIndex[dep.toPath]
-            }.groupBy { subject ->
-                DependenciesResponse.Item(pathToHumanReadableName(subject.path), pathToString(subject.path), subject.itemType, emptyList())
+                reg.subjectsIndex[dep.toPath].map { dep to it }
+            }.map { (dep, subject) ->
+                subject to DependenciesResponse.Item(pathToHumanReadableName(subject.path), pathToString(subject.path), subject.itemType, dep.type, emptyList())
+            }.groupBy {
+                it.second
             }.map { (group, list) ->
-                DependenciesResponse.Item(group.name, group.path, group.itemType, list.map { it.sourcePath })
+                DependenciesResponse.Item(group.name, group.path, group.itemType, group.dependencyType, list.map { it.first.sourcePath })
             }.let(::DependenciesResponse)
 
             call.respond(response)
@@ -66,11 +68,13 @@ fun Application.module() {
             val packagePath = call.getPathParam()
 
             val response = reg.incomingDependenciesIndex[packagePath].flatMap { dep ->
-                reg.subjectsIndex[dep.toPath]
-            }.groupBy { subject ->
-                DependenciesResponse.Item(pathToHumanReadableName(subject.path), pathToString(subject.path), subject.itemType, emptyList())
+                reg.subjectsIndex[dep.fromPath].map { dep to it }
+            }.map { (dep, subject) ->
+                subject to DependenciesResponse.Item(pathToHumanReadableName(subject.path), pathToString(subject.path), subject.itemType, dep.type, emptyList())
+            }.groupBy {
+                it.second
             }.map { (group, list) ->
-                DependenciesResponse.Item(group.name, group.path, group.itemType, list.map { it.sourcePath })
+                DependenciesResponse.Item(group.name, group.path, group.itemType, group.dependencyType, list.map { it.first.sourcePath })
             }.let(::DependenciesResponse)
 
             call.respond(response)

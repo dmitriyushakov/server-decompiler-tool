@@ -14,6 +14,8 @@ import kotlin.js.Promise
 private var cachedDecompilers: DecompilersResponse? = null
 
 fun pathToString(path: Path): String = path.joinToString("/")
+fun stringToPath(pathStr: String): Path = pathStr.split('/')
+fun pathToQualifiedName(path: Path): String = path.joinToString(".")
 
 fun <T> runPromise(block: suspend CoroutineScope.() -> T): Promise<T> {
     return GlobalScope.promise {

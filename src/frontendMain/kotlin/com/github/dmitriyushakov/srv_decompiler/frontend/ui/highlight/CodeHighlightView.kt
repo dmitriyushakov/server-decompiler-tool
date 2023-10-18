@@ -4,14 +4,12 @@ import com.github.dmitriyushakov.srv_decompiler.frontend.model.Path
 import com.github.dmitriyushakov.srv_decompiler.frontend.model.highlight.CodeHighlight
 import com.github.dmitriyushakov.srv_decompiler.frontend.model.highlight.TokenType
 import io.kvision.core.onClick
-import io.kvision.html.Div
+import io.kvision.html.*
 import io.kvision.panel.SimplePanel
-import io.kvision.html.div
-import io.kvision.html.span
-import io.kvision.html.customTag
 import io.kvision.state.ObservableValue
 import io.kvision.state.bind
 import org.w3c.dom.HTMLElement
+import org.w3c.dom.events.MouseEvent
 
 private val tokenTypeClassesSuffixMap: Map<TokenType, String> = mapOf(
     TokenType.Keyword to "keyword",
@@ -43,6 +41,7 @@ class CodeHighlightView(): SimplePanel("code-highlight-view") {
         set(value) = stateObservable.setState(value)
 
     var onLinkClicked: ((Path) -> Unit)? = null
+    var onDeclarationContextMenu: ((Path, MouseEvent) -> Unit)? = null
 
     private fun scrollToLine(containerElement: HTMLElement?, lightedLineElement: HTMLElement?) {
         if (containerElement != null && lightedLineElement != null) {
@@ -91,6 +90,14 @@ class CodeHighlightView(): SimplePanel("code-highlight-view") {
                                         onLinkClicked?.invoke(path)
                                     }
                                 }
+                                token.typePath?.let { typePath ->
+                                    tokenTag.setEventListener<Span> {
+                                        this.contextmenu = { e: MouseEvent ->
+                                            e.preventDefault()
+                                            onDeclarationContextMenu?.invoke(typePath, e)
+                                        }
+                                    }
+                                }
                             }
                         }
                         if (isLighted) varLightedLineDiv = lineDiv
@@ -110,7 +117,6 @@ class CodeHighlightView(): SimplePanel("code-highlight-view") {
             }
 
             addAfterInsertHook {
-                println("lastScrollPosition = $lastScrollPosition")
                 lastScrollPosition ?.let { lastScrollPosition -> getElement()?.scroll(lastScrollPositionX ?: 0.0, lastScrollPosition) }
                 lastScrollPosition = null
                 lastScrollPositionX = null
