@@ -73,6 +73,7 @@ kotlin {
                 implementation("io.ktor:ktor-server-status-pages:$ktorVersion")
                 implementation("io.ktor:ktor-serialization-jackson:$ktorVersion")
                 implementation("io.ktor:ktor-server-content-negotiation:$ktorVersion")
+                implementation("io.ktor:ktor-server-websockets:$ktorVersion")
                 implementation("org.ow2.asm:asm:9.4")
 
                 implementation("org.apache.logging.log4j:log4j-core:2.20.0")

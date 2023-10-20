@@ -15,7 +15,6 @@ import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
-import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 
 private class Indexer
@@ -25,6 +24,22 @@ private val logger = LoggerFactory.getLogger(Indexer::class.java)
 private const val CLASS_EXT = ".class"
 private const val JAR_EXT = ".jar"
 private const val WAR_EXT = ".war"
+
+data class IndexerStatus(
+    val running: Boolean,
+    val finished: Boolean,
+    val currentPath: String?,
+    val fileNumber: Int?,
+    val filesCount: Int?
+)
+
+var indexerStatus = IndexerStatus(
+    running = false,
+    finished = false,
+    currentPath = null,
+    fileNumber = null,
+    filesCount = null
+)
 
 private fun scanIndexingTargets(paths: List<String>): List<IndexingTarget> {
     val targets: MutableList<IndexingTarget> = mutableListOf()
@@ -115,11 +130,20 @@ private fun IndexRegistry.indexForJarFile(path: String) {
 }
 
 fun indexClasses(paths: List<String>) {
+    indexerStatus = IndexerStatus(
+        running = true,
+        finished = false,
+        currentPath = null,
+        fileNumber = null,
+        filesCount = null
+    )
+
     val indexingTargets = scanIndexingTargets(paths)
+    val targetsCount = indexingTargets.size
 
     val newRegistry: IndexRegistry = BasicIndexRegistry()
 
-    for (target in indexingTargets) {
+    for ((idx, target) in indexingTargets.withIndex()) {
         if (logger.isDebugEnabled) {
             val fileType = when(target.type) {
                 IndexingTargetType.ClassFile -> "class file"
@@ -130,11 +154,27 @@ fun indexClasses(paths: List<String>) {
             logger.debug("Indexing for {}, path - {}", fileType, target.path)
         }
 
+        indexerStatus = IndexerStatus(
+            running = true,
+            finished = false,
+            currentPath = target.path,
+            fileNumber = idx,
+            filesCount = targetsCount
+        )
+
         when (target.type) {
             IndexingTargetType.ClassFile -> newRegistry.indexForClassFile(target.path)
             IndexingTargetType.WarFile, IndexingTargetType.JarFile -> newRegistry.indexForJarFile(target.path)
         }
     }
+
+    indexerStatus = IndexerStatus(
+        running = false,
+        finished = true,
+        currentPath = null,
+        fileNumber = targetsCount,
+        filesCount = targetsCount
+    )
 
     globalIndexRegistry = newRegistry
 }
