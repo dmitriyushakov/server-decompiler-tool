@@ -2,15 +2,22 @@ package com.github.dmitriyushakov.srv_decompiler.frontend.api
 
 import com.github.dmitriyushakov.srv_decompiler.frontend.model.*
 import com.github.dmitriyushakov.srv_decompiler.frontend.model.highlight.CodeHighlight
+import com.github.dmitriyushakov.srv_decompiler.frontend.utils.runPromise
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.plugins.websocket.*
 import io.ktor.client.request.*
+import io.ktor.serialization.kotlinx.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.json.Json
 
 private fun makeClient() = HttpClient {
     install(ContentNegotiation) {
         json()
+    }
+    install(WebSockets) {
+        contentConverter = KotlinxWebsocketSerializationConverter(Json)
     }
 }
 
@@ -44,9 +51,24 @@ private suspend inline fun <reified T> get(url: String, getParams: Map<String, A
     }
 }
 
+private inline fun <reified T> getObjectsFromWs(url: String, crossinline action: (T) -> Unit, crossinline isFinalPredicate: (T) -> Boolean) {
+    runPromise {
+        useClient { client ->
+            client.webSocket(url) {
+                while (true) {
+                    val received: T = receiveDeserialized()
+                    action(received)
+                    if (isFinalPredicate(received)) break
+                }
+            }
+        }
+    }
+}
+
 object API {
     private fun pathParam(path: Path): Pair<String, Any?> = "path" to path.joinToString("/")
     private const val apiPrefix = "/api"
+    private const val apiPrefixWebSockets = "/apiws"
     object IndexRegistry {
         private const val registryPrefix = "registry"
 
@@ -85,5 +107,12 @@ object API {
 
         suspend fun getHighlightedCode(path: Path, decompiler: String, sourcePath: String?): CodeHighlight =
             get("$apiPrefix/$decompilerPrefix/getHighlightedCode", getDecompilerGetParams(path, decompiler, sourcePath))
+    }
+
+    object Indexer {
+        private const val indexerStatusPrefix = "indexerStatus"
+        fun receiveStatus(action: (IndexerStatus) -> Unit) {
+            getObjectsFromWs("$apiPrefixWebSockets/$indexerStatusPrefix/ws", action, IndexerStatus::finished)
+        }
     }
 }

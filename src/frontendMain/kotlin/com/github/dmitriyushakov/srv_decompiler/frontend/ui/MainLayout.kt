@@ -2,6 +2,7 @@ package com.github.dmitriyushakov.srv_decompiler.frontend.ui
 
 import com.github.dmitriyushakov.srv_decompiler.frontend.model.Path
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.highlight.CodeHighlightTab
+import com.github.dmitriyushakov.srv_decompiler.frontend.ui.indexer.IndexerStatusTab
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.registry.RegistryTree
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.registry.registryTree
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.tabs.BasicTab
@@ -43,6 +44,11 @@ class MainLayout: SimplePanel("main-layout") {
         }
 
         registryTree.onSelect = { ev -> openClassForPath(ev.path) }
+
+        IndexerStatusTab().let { tab ->
+            tab.openRequest = { openTab(tab) }
+            tab.onFinished = { registryTree.reloadTree()}
+        }
     }
 
     fun openTab(tab: BasicTab) {

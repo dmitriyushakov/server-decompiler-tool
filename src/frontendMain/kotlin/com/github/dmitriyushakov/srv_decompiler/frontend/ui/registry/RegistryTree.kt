@@ -38,6 +38,13 @@ class RegistryTree: SimplePanel("registry-tree") {
         }
     }
 
+    fun reloadTree() {
+        runPromise {
+            val response = API.IndexRegistry.listPackage(listOf("."))
+            treeData.setState(response.toRegistryTreeNodes(emptyList()))
+        }
+    }
+
     init {
         reactBind(treeData) { accessTree, modifyTree ->
             val nodesData = accessTree()
@@ -80,10 +87,7 @@ class RegistryTree: SimplePanel("registry-tree") {
         }
 
         addAfterInsertHook {
-            runPromise {
-                val response = API.IndexRegistry.listPackage(listOf("."))
-                treeData.setState(response.toRegistryTreeNodes(emptyList()))
-            }
+            reloadTree()
         }
     }
 }

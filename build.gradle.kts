@@ -52,6 +52,7 @@ kotlin {
                     port = 3000,
                     proxy = mutableMapOf(
                         "/api/*" to "http://localhost:8080",
+                        "/apiws/*" to mapOf("target" to "ws://localhost:8080", "ws" to true)
                     ),
                     static = mutableListOf("$buildDir/processedResources/frontend/main")
                 )
