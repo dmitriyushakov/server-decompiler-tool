@@ -9,10 +9,12 @@ import com.github.dmitriyushakov.srv_decompiler.frontend.ui.search.SearchTab
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.tabs.BasicTab
 import com.github.dmitriyushakov.srv_decompiler.frontend.utils.findHighestClassPath
 import com.github.dmitriyushakov.srv_decompiler.frontend.utils.runPromise
+import io.kvision.core.onEvent
 import io.kvision.html.button
 import io.kvision.html.div
 import io.kvision.html.span
 import io.kvision.panel.*
+import kotlinx.browser.window
 
 class MainLayout: SimplePanel("main-layout") {
     private lateinit var tabPanelInternal: TabPanel
@@ -20,6 +22,16 @@ class MainLayout: SimplePanel("main-layout") {
 
     val registryTree: RegistryTree get() = registryTreeInternal
     val tabPanel: TabPanel get() = tabPanelInternal
+
+    private var windowTitle: String? = null
+        set(value) {
+            field = value
+            if (value == null) {
+                window.document.title = "Server Decompiler Tool"
+            } else {
+                window.document.title = "$value - Server Decompiler Tool"
+            }
+        }
 
     fun openClassForPath(path: Path) {
         runPromise {
@@ -54,7 +66,13 @@ class MainLayout: SimplePanel("main-layout") {
                 }
                 registryTreeInternal = registryTree()
             }
-            tabPanelInternal = tabPanel(className = "main-layout-tab-panel")
+            tabPanelInternal = tabPanel(className = "main-layout-tab-panel") {
+                onEvent {
+                    changeTab = { ev ->
+                        windowTitle = activeTab?.label
+                    }
+                }
+            }
         }
 
         registryTree.onSelect = { ev -> openClassForPath(ev.path) }
