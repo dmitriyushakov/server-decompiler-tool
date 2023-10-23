@@ -4,21 +4,13 @@ import com.github.dmitriyushakov.srv_decompiler.frontend.api.API
 import com.github.dmitriyushakov.srv_decompiler.frontend.component.common.reactFontIcon
 import com.github.dmitriyushakov.srv_decompiler.frontend.component.tree.Tree
 import com.github.dmitriyushakov.srv_decompiler.frontend.component.tree.TreeNode
-import com.github.dmitriyushakov.srv_decompiler.frontend.model.ItemType
+import com.github.dmitriyushakov.srv_decompiler.frontend.ui.utils.toFAIconClasses
 import com.github.dmitriyushakov.srv_decompiler.frontend.utils.runPromise
 import io.kvision.core.Container
 import io.kvision.panel.SimplePanel
 import io.kvision.react.reactBind
 import io.kvision.state.ObservableValue
 import react.ChildrenBuilder
-
-private fun ItemType.toFAIconClasses(): String = when(this) {
-    ItemType.Package -> "fa-solid fa-box"
-    ItemType.Class -> "fa-solid fa-file"
-    ItemType.Field -> "fa-solid fa-hashtag"
-    ItemType.Method -> "fa-solid fa-bolt"
-    ItemType.LocalVar -> "fa-solid fa-hashtag"
-}
 
 class RegistryTree: SimplePanel("registry-tree") {
     val treeData: ObservableValue<List<RegistryTreeNode>> = ObservableValue(listOf())

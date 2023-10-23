@@ -5,10 +5,13 @@ import com.github.dmitriyushakov.srv_decompiler.frontend.ui.highlight.CodeHighli
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.indexer.IndexerStatusTab
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.registry.RegistryTree
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.registry.registryTree
+import com.github.dmitriyushakov.srv_decompiler.frontend.ui.search.SearchTab
 import com.github.dmitriyushakov.srv_decompiler.frontend.ui.tabs.BasicTab
 import com.github.dmitriyushakov.srv_decompiler.frontend.utils.findHighestClassPath
 import com.github.dmitriyushakov.srv_decompiler.frontend.utils.runPromise
+import io.kvision.html.button
 import io.kvision.html.div
+import io.kvision.html.span
 import io.kvision.panel.*
 
 class MainLayout: SimplePanel("main-layout") {
@@ -38,6 +41,17 @@ class MainLayout: SimplePanel("main-layout") {
     init {
         splitPanel {
             div {
+                hPanel(className = "tool-buttons-panel") {
+                    button("") {
+                        span(className = "fa-solid fa-magnifying-glass")
+                        onClick {
+                            val tab = SearchTab().apply {
+                                onSelectSearchItem = ::openClassForPath
+                            }
+                            openTab(tab)
+                        }
+                    }
+                }
                 registryTreeInternal = registryTree()
             }
             tabPanelInternal = tabPanel(className = "main-layout-tab-panel")

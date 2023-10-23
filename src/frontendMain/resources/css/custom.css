@@ -121,3 +121,27 @@ html, body, div#app, .main-layout, .main-layout > .splitpanel-vertical {
 .indexer-status-tab {
     padding: 25px;
 }
+
+.tool-buttons-panel {
+    padding: 5px;
+}
+
+.search-tab {
+    padding: 0px 20px
+}
+
+.search-result {
+    cursor: pointer;
+}
+
+.search-result:hover {
+    color: #5E6A75;
+}
+
+.search-result:active {
+    color: #212529;
+}
+
+.search-result-icon {
+    margin-right:10px;
+}
