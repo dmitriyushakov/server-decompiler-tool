@@ -39,7 +39,6 @@ class ClassIndexVisitor: ClassVisitor {
     }
 
     private var visitIsCalled: Boolean = false
-    private var visitSourceIsCalled: Boolean = false
 
     private var version: Int by notNull()
     private var access: Int by notNull()
@@ -135,7 +134,7 @@ class ClassIndexVisitor: ClassVisitor {
     }
 
     fun toClassSubject(): ClassSubject {
-        if (!visitIsCalled || !visitSourceIsCalled) error("Class header can't be readed!")
+        if (!visitIsCalled) error("Class header can't be readed!")
         val classPath = asmClassNameToPath(name)
         val classDeps = mutableListOf<Dependency>()
 
@@ -193,8 +192,6 @@ class ClassIndexVisitor: ClassVisitor {
 
     override fun visitSource(source: String?, debug: String?) {
         super.visitSource(source, debug)
-
-        visitSourceIsCalled = true
 
         this.source = source
         this.debug = debug
