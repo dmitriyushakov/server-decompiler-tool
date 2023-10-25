@@ -14,12 +14,13 @@ Web interface allow to not download solution from server side. You can put JAR f
 * Fast solution indexation.
 
 ## Quick start guide
+
 1. Download build from [releases page](https://github.com/dmitriyushakov/server-decompiler-tool/releases) or build by `gradle jar` task. It would make fat JAR build.
 2. Run application
-```bash
-java -jar server-decompiler-tool.jar "<class path 1>;<class path 2>;...;<class path N>"
-```
-If class path not specified, current working directory would be scanned then. 
+   ```bash
+   java -jar server-decompiler-tool.jar "<class path 1>;<class path 2>;...;<class path N>"
+   ```
+   If class path not specified, current working directory would be scanned then. 
 3. Open web interface (default 8080 port).
 4. Find class in the tree on left side or in search (can be opened by button with magnifier icon).
 
