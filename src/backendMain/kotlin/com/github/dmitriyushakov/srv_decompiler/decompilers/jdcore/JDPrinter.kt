@@ -30,7 +30,7 @@ class JDPrinter: Printer {
         sb.append(keyword)
     }
 
-    override fun printDeclaration(type: Int, internalTypeName: String?, name: String, descriptor: String?) {
+    override fun printDeclaration(type: Int, internalTypeName: String?, name: String?, descriptor: String?) {
         sb.append(name)
     }
 
