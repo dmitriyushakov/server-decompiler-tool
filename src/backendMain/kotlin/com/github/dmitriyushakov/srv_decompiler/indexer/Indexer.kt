@@ -1,5 +1,6 @@
 package com.github.dmitriyushakov.srv_decompiler.indexer
 
+import com.github.dmitriyushakov.srv_decompiler.common.Interner
 import com.github.dmitriyushakov.srv_decompiler.indexer.asm.ClassIndexVisitor
 import com.github.dmitriyushakov.srv_decompiler.indexer.model.Subject
 import com.github.dmitriyushakov.srv_decompiler.reading_context.FileReadingContext
@@ -50,7 +51,12 @@ private fun scanIndexingTargets(paths: List<String>): List<IndexingTarget> {
         val file = scanningQueue.removeFirst()
 
         if (file.isDirectory) {
-            scanningQueue.addAll(file.listFiles())
+            val filesList = file.listFiles()
+            if (filesList != null) {
+                scanningQueue.addAll(filesList)
+            } else {
+                logger.warn("Unable to list directory \"${file.path}\"")
+            }
         } else if(file.isFile) {
             val fileName = file.name
             val fileNameLower = fileName.lowercase()
@@ -80,12 +86,12 @@ private fun IndexRegistry.indexForSubject(subject: Subject) {
     }
 }
 
-private fun IndexRegistry.indexForClass(inputStream: InputStream, readingContext: ReadingContext) {
+private fun IndexRegistry.indexForClass(inputStream: InputStream, readingContext: ReadingContext, stringInterner: Interner<String>) {
     try {
         val classVisitor = ClassIndexVisitor(Opcodes.ASM9, readingContext)
         val classReader = ClassReader(inputStream)
         classReader.accept(classVisitor, ClassReader.SKIP_FRAMES)
-        val classSubject = classVisitor.toClassSubject()
+        val classSubject = classVisitor.toClassSubject(stringInterner)
 
         indexForSubject(classSubject)
     } catch (ex: Exception) {
@@ -93,25 +99,25 @@ private fun IndexRegistry.indexForClass(inputStream: InputStream, readingContext
     }
 }
 
-private fun IndexRegistry.indexForClassFile(path: String) {
+private fun IndexRegistry.indexForClassFile(path: String, stringInterner: Interner<String>) {
     FileInputStream(path).use { fileInputStream ->
         val bufferedFileInputStream = BufferedInputStream(fileInputStream)
-        indexForClass(bufferedFileInputStream, FileReadingContext(path))
+        indexForClass(bufferedFileInputStream, FileReadingContext(path), stringInterner)
     }
 }
 
-private fun IndexRegistry.indexForZipInputStream(zipInputStream: ZipInputStream, readingContext: ReadingContext) {
+private fun IndexRegistry.indexForZipInputStream(zipInputStream: ZipInputStream, readingContext: ReadingContext, stringInterner: Interner<String>) {
     var entry = zipInputStream.getNextEntry()
 
     while (entry != null) {
-        val lowerEntryName = entry.name.lowercase()
+        val lowerEntryName = entry.name.lowercase().let(stringInterner)
         val zipEntryReadingContext = ZipEntryReadingContext(entry.name, readingContext)
 
         if (lowerEntryName.endsWith(CLASS_EXT)) {
-            indexForClass(zipInputStream, zipEntryReadingContext)
+            indexForClass(zipInputStream, zipEntryReadingContext, stringInterner)
         } else if(lowerEntryName.endsWith(JAR_EXT) || lowerEntryName.endsWith(WAR_EXT)) {
             val nestedZipInputStream = ZipInputStream(zipInputStream)
-            indexForZipInputStream(nestedZipInputStream, zipEntryReadingContext)
+            indexForZipInputStream(nestedZipInputStream, zipEntryReadingContext, stringInterner)
         }
 
         zipInputStream.closeEntry()
@@ -119,12 +125,12 @@ private fun IndexRegistry.indexForZipInputStream(zipInputStream: ZipInputStream,
     }
 }
 
-private fun IndexRegistry.indexForJarFile(path: String) {
+private fun IndexRegistry.indexForJarFile(path: String, stringInterner: Interner<String>) {
     FileInputStream(path).use { fileInputStream ->
         val bufferedFileInputStream = BufferedInputStream(fileInputStream)
 
         ZipInputStream(bufferedFileInputStream).use { zipInputStream ->
-            indexForZipInputStream(zipInputStream, FileReadingContext(path))
+            indexForZipInputStream(zipInputStream, FileReadingContext(path), stringInterner)
         }
     }
 }
@@ -142,6 +148,7 @@ fun indexClasses(paths: List<String>) {
     val targetsCount = indexingTargets.size
 
     val newRegistry: IndexRegistry = BasicIndexRegistry()
+    val stringInterner: Interner<String> = Interner()
 
     for ((idx, target) in indexingTargets.withIndex()) {
         if (logger.isDebugEnabled) {
@@ -163,8 +170,8 @@ fun indexClasses(paths: List<String>) {
         )
 
         when (target.type) {
-            IndexingTargetType.ClassFile -> newRegistry.indexForClassFile(target.path)
-            IndexingTargetType.WarFile, IndexingTargetType.JarFile -> newRegistry.indexForJarFile(target.path)
+            IndexingTargetType.ClassFile -> newRegistry.indexForClassFile(target.path, stringInterner)
+            IndexingTargetType.WarFile, IndexingTargetType.JarFile -> newRegistry.indexForJarFile(target.path, stringInterner)
         }
     }
 

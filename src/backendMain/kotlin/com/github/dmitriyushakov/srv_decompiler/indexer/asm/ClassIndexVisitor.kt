@@ -1,5 +1,6 @@
 package com.github.dmitriyushakov.srv_decompiler.indexer.asm
 
+import com.github.dmitriyushakov.srv_decompiler.common.Interner
 import com.github.dmitriyushakov.srv_decompiler.indexer.model.*
 import com.github.dmitriyushakov.srv_decompiler.reading_context.ReadingContext
 import com.github.dmitriyushakov.srv_decompiler.utils.bytecode.asmClassNameToPath
@@ -133,14 +134,14 @@ class ClassIndexVisitor: ClassVisitor {
         return methodSubject
     }
 
-    fun toClassSubject(): ClassSubject {
+    fun toClassSubject(stringInterner: Interner<String>): ClassSubject {
         if (!visitIsCalled) error("Class header can't be readed!")
-        val classPath = asmClassNameToPath(name)
+        val classPath = asmClassNameToPath(name).map(stringInterner)
         val classDeps = mutableListOf<Dependency>()
 
         superName?.let { superName ->
             if (superName == "java/lang/Object") null
-            else asmClassNameToPath(superName)
+            else asmClassNameToPath(superName).map(stringInterner)
         }?.let { superPath ->
             val extensionDep = ASMDependency(classPath, superPath, DependencyType.ClassExtension)
             classDeps.add(extensionDep)
@@ -148,25 +149,26 @@ class ClassIndexVisitor: ClassVisitor {
 
         classDeps.addAll(
             interfaces.map(::asmClassNameToPath).map { ifPath ->
-                ASMDependency(classPath, ifPath, DependencyType.InterfaceImplementation)
+                ASMDependency(classPath, ifPath.map(stringInterner), DependencyType.InterfaceImplementation)
             }
         )
 
-        val classSubject = ASMClassSubject(classPath, name, access, classDeps, readingContext)
+        val classSubject = ASMClassSubject(classPath, stringInterner(name), access, classDeps, readingContext)
 
         classSubject.fields.addAll(
             visitedFields.map { field ->
-                val fieldPath = classPath + listOf(field.name)
+                val fieldName = stringInterner(field.name)
+                val fieldPath = classPath + listOf(fieldName)
 
                 val dependencies = (field.signature ?: field.descriptor)
                     .let(::asmGetObjectTypePathsFromDescriptor)
                     .map { depPath ->
-                        ASMDependency(fieldPath, depPath, DependencyType.FieldType)
+                        ASMDependency(fieldPath, depPath.map(stringInterner), DependencyType.FieldType)
                     }
 
                 val isStatic = field.access and Opcodes.ACC_STATIC != 0
 
-                ASMFieldSubject(classSubject, isStatic, field.name, field.descriptor, fieldPath, dependencies)
+                ASMFieldSubject(classSubject, isStatic, fieldName, stringInterner(field.descriptor), fieldPath, dependencies)
             }
         )
 
