@@ -7,19 +7,19 @@ class MergedTreeIndexRegistry: MergedMapTreePathIndex<MergedTreeIndexRegistry.Tr
     override val nodeCreator: () -> TreeNode = TreeNodeCreator
 
     class TreeNode(creator: () -> TreeNode): AbstractTreeNode<TreeNode>(creator) {
-        var subjects: MutableList<Subject>? = null
+        var subjects: Array<Subject?>? = null
         var subjectsExists = false
 
-        var outgoingDependencies: MutableList<Dependency>? = null
+        var outgoingDependencies: Array<Dependency?>? = null
         var outgoingDependenciesExists = false
 
-        var incomingDependencies: MutableList<Dependency>? = null
+        var incomingDependencies: Array<Dependency?>? = null
         var incomingDependenciesExists = false
     }
 
-    override val subjectsIndex: PathIndex<Subject> = ParticularPathIndex(rootNode, TreeNode::subjects, TreeNode::subjectsExists)
-    override val outgoingDependenciesIndex: PathIndex<Dependency> = ParticularPathIndex(rootNode, TreeNode::outgoingDependencies, TreeNode::outgoingDependenciesExists)
-    override val incomingDependenciesIndex: PathIndex<Dependency> = ParticularPathIndex(rootNode, TreeNode::incomingDependencies, TreeNode::incomingDependenciesExists)
+    override val subjectsIndex: PathIndex<Subject> = ParticularPathIndex(rootNode, TreeNode::subjects, TreeNode::subjectsExists, ::arrayOfNulls)
+    override val outgoingDependenciesIndex: PathIndex<Dependency> = ParticularPathIndex(rootNode, TreeNode::outgoingDependencies, TreeNode::outgoingDependenciesExists, ::arrayOfNulls)
+    override val incomingDependenciesIndex: PathIndex<Dependency> = ParticularPathIndex(rootNode, TreeNode::incomingDependencies, TreeNode::incomingDependenciesExists, ::arrayOfNulls)
 
     private object TreeNodeCreator: () -> TreeNode {
         override fun invoke() = TreeNode(this)
