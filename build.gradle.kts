@@ -10,7 +10,7 @@ plugins {
 }
 
 group = "com.github.dmitriyushakov.srv_decompiler"
-version = "0.1"
+version = "0.2"
 
 repositories {
     mavenCentral()
@@ -32,10 +32,10 @@ kotlin {
     jvm("backend") {
         compilations.all {
             java {
-                targetCompatibility = JavaVersion.VERSION_17
+                targetCompatibility = JavaVersion.VERSION_1_8
             }
             kotlinOptions {
-                jvmTarget = "17"
+                jvmTarget = "1.8"
                 freeCompilerArgs = listOf("-Xjsr305=strict")
             }
         }
