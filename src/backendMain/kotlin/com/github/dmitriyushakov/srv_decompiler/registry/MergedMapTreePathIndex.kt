@@ -1,43 +1,79 @@
 package com.github.dmitriyushakov.srv_decompiler.registry
 
-import java.util.concurrent.locks.Lock
-import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.withLock
 import kotlin.reflect.KMutableProperty1
+
+private val INITIAL_CHILDREN_CAPACITY = 4
 
 abstract class MergedMapTreePathIndex<T: MergedMapTreePathIndex.AbstractTreeNode<T>> {
     abstract val nodeCreator: () -> T
     protected val rootNode: T by lazy { nodeCreator() }
     abstract class AbstractTreeNode<T: AbstractTreeNode<T>>(private val creator:() -> T) {
-        val lock: Lock = ReentrantLock()
-        private var childrenMapNullable: MutableMap<String, T>? = null
+        private var kvChildrenArray: Array<Any?> = arrayOfNulls(INITIAL_CHILDREN_CAPACITY * 2)
 
-        private val childrenMap: MutableMap<String, T>
-            get() {
-                var map = childrenMapNullable
-                if (map == null) {
-                    map = mutableMapOf()
-                    childrenMapNullable = map
-                }
-                return map
+        @Suppress("UNCHECKED_CAST")
+        val children: Map<String, T> get()  {
+            val resultMap: MutableMap<String, T> = mutableMapOf()
+            var i = 0
+            val kvChildrenArray = this.kvChildrenArray
+            while (i < kvChildrenArray.size) {
+                val keyOrNull = kvChildrenArray[i] ?: break
+
+                val key = (keyOrNull as? String) ?: error("String expected in odd index!")
+                val value: T = (kvChildrenArray[i + 1] as? T) ?: error("Child node expected in even index!")
+
+                resultMap[key] = value
+                i += 2
             }
 
-        val children: Map<String, T> get() = childrenMapNullable?.let { childrenMap ->
-            if (childrenMap.isEmpty()) emptyMap() else childrenMap.toMap()
-        } ?: emptyMap()
+            return resultMap
+        }
 
-        operator fun get(key: String): T? = childrenMapNullable?.get(key)
+        @Suppress("UNCHECKED_CAST")
+        operator fun get(key: String): T? {
+            var i = 0
+            val kvChildrenArray = this.kvChildrenArray
+            while (i < kvChildrenArray.size) {
+                val keyOrNull = kvChildrenArray[i] ?: break
 
-        fun getOrCreate(key: String): T {
-            return lock.withLock {
-                val node = childrenMap[key]
-                if (node != null) {
-                    node
+                val currentKey = (keyOrNull as? String) ?: error("String expected in odd index!")
+                if (key == currentKey) {
+                    return (kvChildrenArray[i + 1] as? T) ?: error("Child node expected in even index!")
                 } else {
-                    val newNode = creator()
-                    childrenMap[key] = newNode
-                    newNode
+                    i += 2
                 }
+            }
+
+            return null
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        fun getOrCreate(key: String): T {
+            synchronized(this) {
+                var i = 0
+                var kvChildrenArray = this.kvChildrenArray
+                while (i < kvChildrenArray.size) {
+                    val keyOrNull = kvChildrenArray[i] ?: break
+
+                    val currentKey = (keyOrNull as? String) ?: error("String expected in odd index!")
+                    if (key == currentKey) {
+                        return (kvChildrenArray[i + 1] as? T) ?: error("Child node expected in even index!")
+                    } else {
+                        i += 2
+                    }
+                }
+
+                if (i >= kvChildrenArray.size) {
+                    val newKvChildrenArray: Array<Any?> = arrayOfNulls(kvChildrenArray.size * 2)
+                    System.arraycopy(kvChildrenArray, 0, newKvChildrenArray, 0, kvChildrenArray.size)
+                    kvChildrenArray = newKvChildrenArray
+                    this.kvChildrenArray = newKvChildrenArray
+                }
+
+                val newNode = creator()
+                kvChildrenArray[i + 1] = newNode
+                kvChildrenArray[i] = key
+
+                return newNode
             }
         }
     }
@@ -49,7 +85,7 @@ abstract class MergedMapTreePathIndex<T: MergedMapTreePathIndex.AbstractTreeNode
     ): PathIndex<V> {
 
         private fun getValuesForUpdate(node: T): MutableList<V> {
-            return node.lock.withLock {
+            return synchronized(node) {
                 val valuesList = valueListProperty.get(node)
                 if (valuesList == null) {
                     val newValuesList = mutableListOf<V>()
