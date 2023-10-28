@@ -1,8 +1,10 @@
 package com.github.dmitriyushakov.srv_decompiler.registry
 
 import kotlin.reflect.KMutableProperty1
+import kotlin.reflect.javaType
 
 private val INITIAL_CHILDREN_CAPACITY = 4
+private val INITIAL_ENTITIES_ARRAY_CAPACITY = 4
 
 abstract class MergedMapTreePathIndex<T: MergedMapTreePathIndex.AbstractTreeNode<T>> {
     abstract val nodeCreator: () -> T
@@ -80,25 +82,54 @@ abstract class MergedMapTreePathIndex<T: MergedMapTreePathIndex.AbstractTreeNode
 
     class ParticularPathIndex<T: AbstractTreeNode<T>, V>(
         private val rootNode: T,
-        private val valueListProperty: KMutableProperty1<T, MutableList<V>?>,
-        private val valueExistenceFlagProperty: KMutableProperty1<T, Boolean>
+        private val valueArrayProperty: KMutableProperty1<T, Array<V?>?>,
+        private val valueExistenceFlagProperty: KMutableProperty1<T, Boolean>,
+        private val valuesArrayCreator: (Int) -> Array<V?>
     ): PathIndex<V> {
 
-        private fun getValuesForUpdate(node: T): MutableList<V> {
+        @OptIn(ExperimentalStdlibApi::class)
+        private fun addValue(node: T, value: V) {
             return synchronized(node) {
-                val valuesList = valueListProperty.get(node)
-                if (valuesList == null) {
-                    val newValuesList = mutableListOf<V>()
-                    valueListProperty.set(node, newValuesList)
-                    newValuesList
+                var arrUpdated = false
+                val arrClass = valueArrayProperty.returnType.arguments.first().type!!.javaType as Class<*>
+                val propArr: Array<V?>? = valueArrayProperty.get(node)
+
+                var arr: Array<V?> = if (propArr == null) {
+                    arrUpdated = true
+                    valuesArrayCreator(INITIAL_ENTITIES_ARRAY_CAPACITY)
                 } else {
-                    valuesList
+                    propArr
+                }
+
+                var i = 0
+                while (true) {
+                    if (i >= arr.size) {
+                        val newArr = valuesArrayCreator(arr.size * 2)
+                        System.arraycopy(arr, 0, newArr, 0, arr.size)
+                        arr = newArr
+                        arrUpdated = true
+
+                    }
+                    if (arr[i] == null) {
+                        arr[i] = value
+                        break
+                    }
+                    i++
+                }
+
+                if (arrUpdated) {
+                    valueArrayProperty.set(node, arr)
                 }
             }
         }
 
         private fun getValuesForRead(node: T): List<V> {
-            return valueListProperty.get(node) ?: emptyList()
+            val arr = valueArrayProperty.get(node)
+            if (arr == null) {
+                return emptyList()
+            } else {
+                return arr.asList().mapNotNull { it }
+            }
         }
 
         override fun add(path: Path, value: V) {
@@ -110,7 +141,7 @@ abstract class MergedMapTreePathIndex<T: MergedMapTreePathIndex.AbstractTreeNode
                 valueExistenceFlagProperty.set(node, true)
             }
 
-            getValuesForUpdate(node).add(value)
+            addValue(node, value)
         }
 
         override fun get(path: Path): Collection<V> {
