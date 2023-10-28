@@ -6,8 +6,8 @@ import com.github.dmitriyushakov.srv_decompiler.indexer.model.Subject
 import com.github.dmitriyushakov.srv_decompiler.reading_context.FileReadingContext
 import com.github.dmitriyushakov.srv_decompiler.reading_context.ReadingContext
 import com.github.dmitriyushakov.srv_decompiler.reading_context.ZipEntryReadingContext
-import com.github.dmitriyushakov.srv_decompiler.registry.BasicIndexRegistry
 import com.github.dmitriyushakov.srv_decompiler.registry.IndexRegistry
+import com.github.dmitriyushakov.srv_decompiler.registry.MergedTreeIndexRegistry
 import com.github.dmitriyushakov.srv_decompiler.registry.globalIndexRegistry
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.Opcodes
@@ -147,7 +147,7 @@ fun indexClasses(paths: List<String>) {
     val indexingTargets = scanIndexingTargets(paths)
     val targetsCount = indexingTargets.size
 
-    val newRegistry: IndexRegistry = BasicIndexRegistry()
+    val newRegistry: IndexRegistry = MergedTreeIndexRegistry()
     val stringInterner: Interner<String> = Interner()
 
     for ((idx, target) in indexingTargets.withIndex()) {
