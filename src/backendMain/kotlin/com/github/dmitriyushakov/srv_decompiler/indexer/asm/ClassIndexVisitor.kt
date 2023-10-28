@@ -129,7 +129,7 @@ class ClassIndexVisitor: ClassVisitor {
             }
         }
 
-        methodSubject.localVariableSubject.addAll(localVariables)
+        if (localVariables.isNotEmpty()) methodSubject.localVariableSubject = localVariables
 
         return methodSubject
     }
@@ -155,26 +155,26 @@ class ClassIndexVisitor: ClassVisitor {
 
         val classSubject = ASMClassSubject(classPath, stringInterner(name), access, classDeps, readingContext)
 
-        classSubject.fields.addAll(
-            visitedFields.map { field ->
-                val fieldName = stringInterner(field.name)
-                val fieldPath = classPath + listOf(fieldName)
+        val classSubjectFields = visitedFields.map { field ->
+            val fieldName = stringInterner(field.name)
+            val fieldPath = classPath + listOf(fieldName)
 
-                val dependencies = (field.signature ?: field.descriptor)
-                    .let(::asmGetObjectTypePathsFromDescriptor)
-                    .map { depPath ->
-                        ASMDependency(fieldPath, depPath.map(stringInterner), DependencyType.FieldType)
-                    }
+            val dependencies = (field.signature ?: field.descriptor)
+                .let(::asmGetObjectTypePathsFromDescriptor)
+                .map { depPath ->
+                    ASMDependency(fieldPath, depPath.map(stringInterner), DependencyType.FieldType)
+                }
 
-                val isStatic = field.access and Opcodes.ACC_STATIC != 0
+            val isStatic = field.access and Opcodes.ACC_STATIC != 0
 
-                ASMFieldSubject(classSubject, isStatic, fieldName, stringInterner(field.descriptor), fieldPath, dependencies)
-            }
-        )
+            ASMFieldSubject(classSubject, isStatic, fieldName, stringInterner(field.descriptor), fieldPath, dependencies)
+        }
 
-        classSubject.methods.addAll(
-            visitedMethods.map { it.toMethodSubject(classSubject) }
-        )
+        if (classSubjectFields.isNotEmpty()) classSubject.fields = classSubjectFields
+
+        val classSubjectMethods = visitedMethods.map { it.toMethodSubject(classSubject) }
+
+        if (classSubjectMethods.isNotEmpty()) classSubject.methods = classSubjectMethods
 
         return classSubject
     }
