@@ -10,9 +10,14 @@ class ASMFieldSubject(
     override val static: Boolean,
     override val name: String,
     override val descriptor: String,
-    override val path: List<String>,
-    override val dependencies: List<Dependency>
+    path: List<String>,
+    dependencies: List<Dependency>
 ) : FieldSubject {
+    private val pathArr: Array<String> = path.toTypedArray()
+    private  val dependenciesArr: Array<Dependency>? = if (dependencies.isEmpty()) null else dependencies.toTypedArray()
+
+    override val path: List<String> get() = pathArr.toList()
+    override val dependencies: List<Dependency> get() = dependenciesArr?.toList() ?: emptyList()
     override val childrenSubjects: List<Subject> get() = emptyList()
     override val sourcePath: String get() = owner.sourcePath
 }

@@ -4,7 +4,13 @@ import com.github.dmitriyushakov.srv_decompiler.indexer.model.Dependency
 import com.github.dmitriyushakov.srv_decompiler.indexer.model.DependencyType
 
 class ASMDependency(
-    override val fromPath: List<String>,
-    override val toPath: List<String>,
+    fromPath: List<String>,
+    toPath: List<String>,
     override val type: DependencyType
-) : Dependency
+) : Dependency {
+    private val fromPathArr: Array<String> = fromPath.toTypedArray()
+    private val toPathArr: Array<String> = toPath.toTypedArray()
+
+    override val fromPath: List<String> get() = fromPathArr.toList()
+    override val toPath: List<String> get() = toPathArr.toList()
+}

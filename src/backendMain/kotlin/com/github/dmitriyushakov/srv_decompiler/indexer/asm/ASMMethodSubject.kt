@@ -10,9 +10,21 @@ class ASMMethodSubject(
     override val static: Boolean,
     override val name: String,
     override val descriptor: String,
-    override val path: List<String>,
-    override val dependencies: List<Dependency>
+    path: List<String>,
+    dependencies: List<Dependency>
 ) : MethodSubject {
-    override val localVariableSubject: MutableList<LocalVariableSubject> = mutableListOf()
+    private var localVariableSubjectArr: Array<LocalVariableSubject>? = null
+    private val pathArr: Array<String> = path.toTypedArray()
+    private  val dependenciesArr: Array<Dependency>? = if (dependencies.isEmpty()) null else dependencies.toTypedArray()
+
+    override val path: List<String> get() = pathArr.toList()
+    override val dependencies: List<Dependency> get() = dependenciesArr?.toList() ?: emptyList()
+
+    override var localVariableSubject: List<LocalVariableSubject>
+        get() = localVariableSubjectArr?.toList() ?: emptyList()
+        set(value) {
+            localVariableSubjectArr = value.toTypedArray()
+        }
+
     override val sourcePath: String get() = owner.sourcePath
 }
