@@ -13,7 +13,7 @@ private const val NEXT_BLOCK_INDEX_OFFSET: Int = DATA_LENGTH_OFFSET + Int.SIZE_B
 private const val PAYLOAD_OFFSET: Int = NEXT_BLOCK_INDEX_OFFSET + Int.SIZE_BYTES
 private const val PAYLOAD_SIZE: Int = BLOCK_SIZE - PAYLOAD_OFFSET
 
-class BlockFile(file: File, isTemp: Boolean = true) {
+class BlockFile(file: File, isTemp: Boolean = true): AutoCloseable {
     private val lock: Lock = ReentrantLock()
     private val raf: RandomAccessFile
     private val buffer: ByteArray = ByteArray(BLOCK_SIZE)
@@ -128,5 +128,9 @@ class BlockFile(file: File, isTemp: Boolean = true) {
 
             return resultArray ?: error("Invalid state! Result array is null after loop!")
         }
+    }
+
+    override fun close() {
+        raf.close()
     }
 }
