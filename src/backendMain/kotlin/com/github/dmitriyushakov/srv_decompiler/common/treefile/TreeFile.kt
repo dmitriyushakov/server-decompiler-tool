@@ -1,11 +1,11 @@
 package com.github.dmitriyushakov.srv_decompiler.common.treefile
 
-interface TreeFile {
+interface TreeFile: AutoCloseable {
     interface Node {
         val keys: List<ByteArray>
         var payload: ByteArray
 
-        fun get(key: ByteArray): Node?
+        operator fun get(key: ByteArray): Node?
         fun getOrCreate(key: ByteArray): Node
     }
 

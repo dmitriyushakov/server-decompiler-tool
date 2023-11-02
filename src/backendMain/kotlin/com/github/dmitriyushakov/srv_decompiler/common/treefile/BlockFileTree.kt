@@ -53,7 +53,7 @@ class BlockFileTree(val blockFile: BlockFile): TreeFile, AutoCloseable {
             }
         }
 
-        override fun get(key: ByteArray): TreeFile.Node? {
+        override operator fun get(key: ByteArray): TreeFile.Node? {
             val firstAttempt = loadedNodes.firstOrNull { it.first contentEquals key }?.second
             if (firstAttempt != null) return firstAttempt
 
