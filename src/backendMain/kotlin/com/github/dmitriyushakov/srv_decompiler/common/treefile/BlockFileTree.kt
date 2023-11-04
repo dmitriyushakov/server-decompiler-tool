@@ -167,6 +167,12 @@ class BlockFileTree(val blockFile: BlockFile): TreeFile, AutoCloseable {
             }
         }
 
+    override fun flush() {
+        synchronized(this) {
+            blockFile.flush()
+        }
+    }
+
     override fun commit() {
         synchronized(this) {
             loadedRoot?.commit()

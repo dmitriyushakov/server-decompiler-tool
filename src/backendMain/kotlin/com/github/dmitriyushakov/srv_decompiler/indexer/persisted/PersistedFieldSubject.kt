@@ -70,7 +70,7 @@ class PersistedFieldSubject : FieldSubject {
     override val dependencies: List<PersistedDependency> by Delegates.dependenciesLoadDelegate
 
     object Serializer: SequentialFileSerializer<PersistedFieldSubject> {
-        override fun toBytes(file: SequentialFile, offset: Long, entity: PersistedFieldSubject): SequentialFileSerializer.Result<PersistedFieldSubject> {
+        override fun toBytes(file: SequentialFile, offsetGetter: () -> Long, entity: PersistedFieldSubject): SequentialFileSerializer.Result<PersistedFieldSubject> {
             val pointer = entity.pointer
             if (pointer != null) return pointer.toResult()
 
@@ -85,7 +85,7 @@ class PersistedFieldSubject : FieldSubject {
                 }
             }
 
-            entity.pointer = EntityPointer(offset, bytes.size, this)
+            entity.pointer = EntityPointer(offsetGetter(), bytes.size, this)
             return bytes.toResult()
         }
 

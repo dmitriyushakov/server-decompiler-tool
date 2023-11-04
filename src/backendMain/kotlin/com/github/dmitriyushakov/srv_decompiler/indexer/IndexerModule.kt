@@ -23,5 +23,5 @@ fun Application.indexerModule() {
         pathsList
     } ?: listOf(".")
 
-    startIndexation(pathsList)
+    startIndexation(IndexType.InMemory, pathsList)
 }

@@ -11,7 +11,9 @@ fun ByteArray.getDataInputStream(): DataInputStream = DataInputStream(ByteArrayI
 
 fun DataInputStream.readString(): String {
     val stringBytesCnt = readUnsignedShort()
-    return String(readNBytes(stringBytesCnt))
+    val bytes = ByteArray(stringBytesCnt)
+    read(bytes)
+    return String(bytes)
 }
 
 fun DataInputStream.readStringList(): List<String> {

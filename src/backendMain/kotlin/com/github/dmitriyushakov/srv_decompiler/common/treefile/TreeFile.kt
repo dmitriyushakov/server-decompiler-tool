@@ -11,6 +11,7 @@ interface TreeFile: AutoCloseable {
 
     val root: Node
 
+    fun flush()
     fun commit()
     fun reject()
 }

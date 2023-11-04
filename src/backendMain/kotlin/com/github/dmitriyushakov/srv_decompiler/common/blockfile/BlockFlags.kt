@@ -11,14 +11,14 @@ class BlockFlags(var flagsByte: Byte) {
     var isFirstBlock: Boolean
         get() = (flagsByte.toInt() and FIRST_BLOCK_FLAG.toInt()) != 0
         set(value) {
-            if (value) flagsByte = (flagsByte.toInt() and FIRST_BLOCK_FLAG.toInt()).toByte()
+            if (value) flagsByte = (flagsByte.toInt() or FIRST_BLOCK_FLAG.toInt()).toByte()
             else flagsByte = (flagsByte.toInt() and FIRST_BLOCK_FLAG.toInt().inv()).toByte()
         }
 
     var isLastBlock: Boolean
         get() = (flagsByte.toInt() and LAST_BLOCK_FLAG.toInt()) != 0
         set(value) {
-            if (value) flagsByte = (flagsByte.toInt() and LAST_BLOCK_FLAG.toInt()).toByte()
+            if (value) flagsByte = (flagsByte.toInt() or LAST_BLOCK_FLAG.toInt()).toByte()
             else flagsByte = (flagsByte.toInt() and LAST_BLOCK_FLAG.toInt().inv()).toByte()
         }
 }

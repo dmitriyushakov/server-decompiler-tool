@@ -6,6 +6,7 @@ import com.github.dmitriyushakov.srv_decompiler.indexer.model.Subject
 import com.github.dmitriyushakov.srv_decompiler.reading_context.FileReadingContext
 import com.github.dmitriyushakov.srv_decompiler.reading_context.ReadingContext
 import com.github.dmitriyushakov.srv_decompiler.reading_context.ZipEntryReadingContext
+import com.github.dmitriyushakov.srv_decompiler.registry.FileBasedIndexRegistry
 import com.github.dmitriyushakov.srv_decompiler.registry.IndexRegistry
 import com.github.dmitriyushakov.srv_decompiler.registry.MergedTreeIndexRegistry
 import com.github.dmitriyushakov.srv_decompiler.registry.globalIndexRegistry
@@ -135,7 +136,7 @@ private fun IndexRegistry.indexForJarFile(path: String, stringInterner: Interner
     }
 }
 
-fun indexClasses(paths: List<String>) {
+private fun indexClasses(newRegistry: IndexRegistry, paths: List<String>) {
     indexerStatus = IndexerStatus(
         running = true,
         finished = false,
@@ -147,7 +148,6 @@ fun indexClasses(paths: List<String>) {
     val indexingTargets = scanIndexingTargets(paths)
     val targetsCount = indexingTargets.size
 
-    val newRegistry: IndexRegistry = MergedTreeIndexRegistry()
     val stringInterner: Interner<String> = Interner()
 
     for ((idx, target) in indexingTargets.withIndex()) {
@@ -182,13 +182,46 @@ fun indexClasses(paths: List<String>) {
         fileNumber = targetsCount,
         filesCount = targetsCount
     )
+}
 
+private fun indexToInMemoryIndex(paths: List<String>) {
+    val newRegistry = MergedTreeIndexRegistry()
+    indexClasses(newRegistry, paths)
     globalIndexRegistry = newRegistry
 }
 
-fun startIndexation(paths: List<String>) {
+private fun indexToFileBasedIndex(paths: List<String>, temporary: Boolean) {
+    val indexFilesPrefix = "./index_registry"
+    val treeFile = File("$indexFilesPrefix.tree")
+    val entitiesFile = File("$indexFilesPrefix.entities")
+    val alreadyExists = treeFile.exists() && entitiesFile.exists()
+    val newRegistry = FileBasedIndexRegistry(treeFile, entitiesFile, temporary)
+    if (!alreadyExists || temporary) {
+        try {
+            indexClasses(newRegistry, paths)
+        } catch (th: Throwable) {
+            logger.error("Exception caused during creation of file based index!", th)
+            try {
+                newRegistry.close()
+            } catch (ex: Exception) {
+                logger.error("Exception caused during close of file based index!", ex)
+            }
+            if (!treeFile.delete()) treeFile.deleteOnExit()
+            if (!entitiesFile.delete()) entitiesFile.deleteOnExit()
+            throw th
+        }
+    }
+    newRegistry.flush()
+    globalIndexRegistry = newRegistry
+}
+
+fun startIndexation(indexType: IndexType, paths: List<String>) {
     val runnable = Runnable {
-        indexClasses(paths)
+        when (indexType) {
+            IndexType.InMemory -> indexToInMemoryIndex(paths)
+            IndexType.FileBased -> indexToFileBasedIndex(paths, false)
+            IndexType.FileBasedTemp -> indexToFileBasedIndex(paths, true)
+        }
     }
 
     val th = Thread(runnable)

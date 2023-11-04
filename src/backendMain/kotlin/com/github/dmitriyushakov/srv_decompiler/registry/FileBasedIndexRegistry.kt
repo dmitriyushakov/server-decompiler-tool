@@ -1,6 +1,5 @@
 package com.github.dmitriyushakov.srv_decompiler.registry
 
-import com.fasterxml.jackson.annotation.JsonAutoDetect.Value
 import com.github.dmitriyushakov.srv_decompiler.common.blockfile.BlockFile
 import com.github.dmitriyushakov.srv_decompiler.common.seqfile.EntityPointer
 import com.github.dmitriyushakov.srv_decompiler.common.seqfile.SequentialFile
@@ -12,22 +11,57 @@ import com.github.dmitriyushakov.srv_decompiler.utils.data.dataBytes
 import com.github.dmitriyushakov.srv_decompiler.utils.data.getDataInputStream
 import com.github.dmitriyushakov.srv_decompiler.utils.data.readEntityPointersList
 import com.github.dmitriyushakov.srv_decompiler.utils.data.writeEntityPointersList
+import com.github.dmitriyushakov.srv_decompiler.utils.lruCache
 import java.io.File
+import kotlin.reflect.KMutableProperty0
 import kotlin.reflect.KMutableProperty1
+import kotlin.reflect.KProperty
 
 private const val SUBJECTS_EXIST_FLAG = 0b001
 private const val OUTGOING_DEPENDENCIES_EXIST_FLAG = 0b010
 private const val INCOMING_DEPENDENCIES_EXIST_FLAG = 0b100
+private const val PARSED_NODE_CACHE_SIZE = 1000
 
 class FileBasedIndexRegistry(
     private val tree: TreeFile,
     private val entitiesFile: SequentialFile
 ): IndexRegistry, AutoCloseable {
+    private val parsedNodeCache: MutableMap<PayloadKey, ImmutableParsedNodeData> = lruCache(PARSED_NODE_CACHE_SIZE)
     constructor(blockTreeFile: BlockFile, entitiesFile: SequentialFile): this(BlockFileTree(blockTreeFile), entitiesFile)
     constructor(treeFile: File, entitiesFile: File, isTemp: Boolean = true): this(BlockFile(treeFile, isTemp), SequentialFile(entitiesFile, isTemp))
     constructor(treeFilename: String, entitiesFilename: String, isTemp: Boolean = true): this(File(treeFilename), File(entitiesFilename), isTemp)
 
-    private inner class Node (
+    private class PayloadKey(val payload: ByteArray) {
+        override fun hashCode() = payload.contentHashCode()
+        override fun equals(other: Any?): Boolean = if (other !is PayloadKey) false else payload contentEquals other.payload
+    }
+
+    private inner class ImmutableParsedNodeData (
+        val classSubjects: List<EntityPointer<PersistedClassSubject>>,
+        val methodSubjects: List<EntityPointer<PersistedMethodSubject>>,
+        val fieldSubjects: List<EntityPointer<PersistedFieldSubject>>,
+        val localVariableSubjects: List<EntityPointer<PersistedLocalVariableSubject>>,
+        val subjectsExists: Boolean,
+        val outgoingDependencies: List<EntityPointer<PersistedDependency>>,
+        val outgoingDependenciesExists: Boolean,
+        val incomingDependencies: List<EntityPointer<PersistedDependency>>,
+        val incomingDependenciesExists: Boolean
+    ) {
+        fun bindToPhysicalNode(backNode: TreeFile.Node) = ParsedNodeData(
+            backNode = backNode,
+            classSubjects = classSubjects,
+            methodSubjects = methodSubjects,
+            fieldSubjects = fieldSubjects,
+            localVariableSubjects = localVariableSubjects,
+            subjectsExists = subjectsExists,
+            outgoingDependencies = outgoingDependencies,
+            outgoingDependenciesExists = outgoingDependenciesExists,
+            incomingDependencies = incomingDependencies,
+            incomingDependenciesExists = incomingDependenciesExists
+        )
+    }
+
+    private inner class ParsedNodeData (
         private val backNode: TreeFile.Node,
         classSubjects: List<EntityPointer<PersistedClassSubject>>,
         methodSubjects: List<EntityPointer<PersistedMethodSubject>>,
@@ -39,29 +73,6 @@ class FileBasedIndexRegistry(
         incomingDependencies: List<EntityPointer<PersistedDependency>>,
         incomingDependenciesExists: Boolean
     ) {
-
-        val children: Map<String, Node> get() {
-            val resultMap: MutableMap<String, Node> = mutableMapOf()
-
-            for (keyBytes in backNode.keys) {
-                val key = String(keyBytes)
-                val node = backNode.get(keyBytes)!!.parseNode()
-                resultMap[key] = node
-            }
-
-            return  resultMap
-        }
-
-        operator fun get(key: String): Node? {
-            val keyBytes = key.toByteArray()
-            return backNode[keyBytes]?.parseNode()
-        }
-
-        fun getOrCreate(key: String): Node {
-            val keyBytes = key.toByteArray()
-            return backNode.getOrCreate(keyBytes).parseNode()
-        }
-
         var classSubjects: List<EntityPointer<PersistedClassSubject>> = classSubjects
             set(value) {
                 field = value
@@ -84,8 +95,9 @@ class FileBasedIndexRegistry(
             }
         var subjectsExists: Boolean = subjectsExists
             set(value) {
+                val updated = value != field
                 field = value
-                updatePayload()
+                if (updated) updatePayload()
             }
         var outgoingDependencies: List<EntityPointer<PersistedDependency>> = outgoingDependencies
             set(value) {
@@ -94,8 +106,9 @@ class FileBasedIndexRegistry(
             }
         var outgoingDependenciesExists: Boolean = outgoingDependenciesExists
             set(value) {
+                val updated = value != field
                 field = value
-                updatePayload()
+                if (updated) updatePayload()
             }
         var incomingDependencies: List<EntityPointer<PersistedDependency>> = incomingDependencies
             set(value) {
@@ -104,45 +117,33 @@ class FileBasedIndexRegistry(
             }
         var incomingDependenciesExists: Boolean = incomingDependenciesExists
             set(value) {
+                val updated = value != field
                 field = value
-                updatePayload()
+                if (updated) updatePayload()
             }
 
         private infix fun Boolean.and(flag: Int) = if (this) flag else 0
 
         private fun updatePayload() {
-            backNode.payload = dataBytes { data ->
+            parsedNodeCache.remove(PayloadKey(backNode.payload))
+            val newPayload = dataBytes { data ->
+                val flags = (
+                        (subjectsExists and SUBJECTS_EXIST_FLAG) or
+                                (outgoingDependenciesExists and OUTGOING_DEPENDENCIES_EXIST_FLAG) or
+                                (incomingDependenciesExists and INCOMING_DEPENDENCIES_EXIST_FLAG))
+                data.writeByte(flags)
                 data.writeEntityPointersList(classSubjects)
                 data.writeEntityPointersList(methodSubjects)
                 data.writeEntityPointersList(fieldSubjects)
                 data.writeEntityPointersList(localVariableSubjects)
-                val flags = (
-                    (subjectsExists and SUBJECTS_EXIST_FLAG) or
-                    (outgoingDependenciesExists and OUTGOING_DEPENDENCIES_EXIST_FLAG) or
-                    (incomingDependenciesExists and INCOMING_DEPENDENCIES_EXIST_FLAG))
-                data.writeByte(flags)
                 data.writeEntityPointersList(outgoingDependencies)
                 data.writeEntityPointersList(incomingDependencies)
             }
+            parsedNodeCache[PayloadKey(newPayload.clone())] = toImmutable()
+            backNode.payload = newPayload
         }
-    }
 
-    private fun TreeFile.Node.parseNode(): Node {
-        val data = payload.getDataInputStream()
-
-        val classSubjects = data.readEntityPointersList(PersistedClassSubject.Serializer)
-        val methodSubjects = data.readEntityPointersList(PersistedMethodSubject.Serializer)
-        val fieldSubjects = data.readEntityPointersList(PersistedFieldSubject.Serializer)
-        val localVariableSubjects = data.readEntityPointersList(PersistedLocalVariableSubject.Serializer)
-        val flags = data.readUnsignedByte()
-        val subjectsExists = (flags and SUBJECTS_EXIST_FLAG) != 0
-        val outgoingDependencies = data.readEntityPointersList(PersistedDependency.Serializer)
-        val outgoingDependenciesExists = (flags and OUTGOING_DEPENDENCIES_EXIST_FLAG) != 0
-        val incomingDependencies = data.readEntityPointersList(PersistedDependency.Serializer)
-        val incomingDependenciesExists = (flags and INCOMING_DEPENDENCIES_EXIST_FLAG) != 0
-
-        return Node (
-            backNode = this,
+        fun toImmutable(): ImmutableParsedNodeData = ImmutableParsedNodeData(
             classSubjects = classSubjects,
             methodSubjects = methodSubjects,
             fieldSubjects = fieldSubjects,
@@ -155,7 +156,159 @@ class FileBasedIndexRegistry(
         )
     }
 
-    private val root: Node get() = tree.root.parseNode()
+    private inner class LazyParsedNodeDataDelegate<V>(
+        private val backNode: TreeFile.Node,
+        private val parsedNodeProperty: KMutableProperty0<ParsedNodeData?>,
+        private val dataProperty: KMutableProperty1<ParsedNodeData, V>) {
+        private fun getParsedData(): ParsedNodeData {
+            val parsedNode = parsedNodeProperty.get()
+            if (parsedNode == null) {
+                val newParsedNode = getParsedNode(backNode.payload).bindToPhysicalNode(backNode)
+                parsedNodeProperty.set(newParsedNode)
+                return newParsedNode
+            } else {
+                return parsedNode
+            }
+        }
+        operator fun getValue(thisRef: Any?, property: KProperty<*>): V{
+            return dataProperty.get(getParsedData())
+        }
+
+        operator fun setValue(thisRef: Any?, property: KProperty<*>, value: V) {
+            dataProperty.set(getParsedData(), value)
+        }
+    }
+
+    private inner class NodeFlagDelegate(
+        private val backNode: TreeFile.Node,
+        private val flagMask: Int,
+        private val parsedNodeProperty: KMutableProperty0<ParsedNodeData?>,
+        private val flagProperty: KMutableProperty1<ParsedNodeData, Boolean>
+    ) {
+        operator fun getValue(thisRef: Any?, property: KProperty<*>): Boolean{
+            val parsedNodeData = parsedNodeProperty.get()
+            if (parsedNodeData == null) {
+                if (backNode.payload.isEmpty()) {
+                    return false
+                } else {
+                    return backNode.payload[0].toInt() and flagMask != 0
+                }
+            } else {
+                return flagProperty.get(parsedNodeData)
+            }
+        }
+
+        operator fun setValue(thisRef: Any?, property: KProperty<*>, value: Boolean) {
+            val parsedNodeData = parsedNodeProperty.get()
+            if (parsedNodeData != null) flagProperty.set(parsedNodeData, value)
+            else {
+                if (backNode.payload.isEmpty()) {
+                    val newParsedNode = getParsedNode(backNode.payload).bindToPhysicalNode(backNode)
+                    parsedNodeProperty.set(newParsedNode)
+                    flagProperty.set(newParsedNode, value)
+                } else {
+                    backNode.payload[0] = if (value) {
+                        (backNode.payload[0].toInt() or flagMask).toByte()
+                    } else {
+                        (backNode.payload[0].toInt() and flagMask.inv()).toByte()
+                    }
+                }
+            }
+        }
+    }
+
+    private inner class Node (
+        private val backNode: TreeFile.Node
+    ) {
+        private var parsedNodeData: ParsedNodeData? = null
+        private fun <V> lazyData(dataProperty: KMutableProperty1<ParsedNodeData, V>) =
+            LazyParsedNodeDataDelegate(backNode, this::parsedNodeData, dataProperty)
+
+        private fun flag(flagMask: Int, flagProperty: KMutableProperty1<ParsedNodeData, Boolean>) =
+            NodeFlagDelegate(backNode, flagMask, this::parsedNodeData, flagProperty)
+
+        val children: Map<String, Node> get() {
+            val resultMap: MutableMap<String, Node> = mutableMapOf()
+
+            for (keyBytes in backNode.keys) {
+                val key = String(keyBytes)
+                val node = Node(backNode.get(keyBytes)!!)
+                resultMap[key] = node
+            }
+
+            return  resultMap
+        }
+
+        operator fun get(key: String): Node? {
+            val keyBytes = key.toByteArray()
+            return backNode[keyBytes]?.let(::Node)
+        }
+
+        fun getOrCreate(key: String): Node {
+            val keyBytes = key.toByteArray()
+            return Node(backNode.getOrCreate(keyBytes))
+        }
+
+        var classSubjects: List<EntityPointer<PersistedClassSubject>> by lazyData(ParsedNodeData::classSubjects)
+        var methodSubjects: List<EntityPointer<PersistedMethodSubject>> by lazyData(ParsedNodeData::methodSubjects)
+        var fieldSubjects: List<EntityPointer<PersistedFieldSubject>> by lazyData(ParsedNodeData::fieldSubjects)
+        var localVariableSubjects: List<EntityPointer<PersistedLocalVariableSubject>> by lazyData(ParsedNodeData::localVariableSubjects)
+        var outgoingDependencies: List<EntityPointer<PersistedDependency>> by lazyData(ParsedNodeData::outgoingDependencies)
+        var incomingDependencies: List<EntityPointer<PersistedDependency>> by lazyData(ParsedNodeData::incomingDependencies)
+
+        var subjectsExists: Boolean by flag(SUBJECTS_EXIST_FLAG, ParsedNodeData::subjectsExists)
+        var outgoingDependenciesExists: Boolean by flag(OUTGOING_DEPENDENCIES_EXIST_FLAG, ParsedNodeData::outgoingDependenciesExists)
+        var incomingDependenciesExists: Boolean by flag(INCOMING_DEPENDENCIES_EXIST_FLAG, ParsedNodeData::incomingDependenciesExists)
+    }
+
+    private fun getParsedNode(payload: ByteArray): ImmutableParsedNodeData {
+        return parsedNodeCache.computeIfAbsent(PayloadKey(payload.clone())) { key ->
+            parseNode(key.payload)
+        }
+    }
+
+    private fun parseNode(payload: ByteArray): ImmutableParsedNodeData {
+        if (payload.isEmpty()) {
+            return ImmutableParsedNodeData (
+                classSubjects = emptyList(),
+                methodSubjects = emptyList(),
+                fieldSubjects = emptyList(),
+                localVariableSubjects = emptyList(),
+                subjectsExists = false,
+                outgoingDependencies = emptyList(),
+                outgoingDependenciesExists = false,
+                incomingDependencies = emptyList(),
+                incomingDependenciesExists = false
+            )
+        }
+
+        val data = payload.getDataInputStream()
+
+        val flags = data.readUnsignedByte()
+        val classSubjects = data.readEntityPointersList(PersistedClassSubject.Serializer)
+        val methodSubjects = data.readEntityPointersList(PersistedMethodSubject.Serializer)
+        val fieldSubjects = data.readEntityPointersList(PersistedFieldSubject.Serializer)
+        val localVariableSubjects = data.readEntityPointersList(PersistedLocalVariableSubject.Serializer)
+        val subjectsExists = (flags and SUBJECTS_EXIST_FLAG) != 0
+        val outgoingDependencies = data.readEntityPointersList(PersistedDependency.Serializer)
+        val outgoingDependenciesExists = (flags and OUTGOING_DEPENDENCIES_EXIST_FLAG) != 0
+        val incomingDependencies = data.readEntityPointersList(PersistedDependency.Serializer)
+        val incomingDependenciesExists = (flags and INCOMING_DEPENDENCIES_EXIST_FLAG) != 0
+
+        return ImmutableParsedNodeData (
+            classSubjects = classSubjects,
+            methodSubjects = methodSubjects,
+            fieldSubjects = fieldSubjects,
+            localVariableSubjects = localVariableSubjects,
+            subjectsExists = subjectsExists,
+            outgoingDependencies = outgoingDependencies,
+            outgoingDependenciesExists = outgoingDependenciesExists,
+            incomingDependencies = incomingDependencies,
+            incomingDependenciesExists = incomingDependenciesExists
+        )
+    }
+
+    private val root: Node get() = Node(tree.root)
 
     private abstract inner class AbstractPathIndex<V>: PathIndex<V> {
         protected abstract var Node.valueExistence: Boolean
@@ -163,26 +316,34 @@ class FileBasedIndexRegistry(
         protected abstract fun Node.getValues(): Collection<V>
 
         override fun add(path: Path, value: V) {
-            var node = root
-            node.valueExistence = true
-
-            for (elem in path) {
-                node = node.getOrCreate(elem)
+            try {
+                var node = root
                 node.valueExistence = true
-            }
 
-            node.addValue(value)
+                for (elem in path) {
+                    node = node.getOrCreate(elem)
+                    node.valueExistence = true
+                }
+
+                node.addValue(value)
+            } finally {
+                tree.commit()
+            }
         }
 
         override fun get(path: Path): Collection<V> {
-            var node = root
+            try {
+                var node = root
 
-            for (elem in path) {
-                node = node[elem] ?: return emptyList()
-                if (!node.valueExistence) return emptyList()
+                for (elem in path) {
+                    node = node[elem] ?: return emptyList()
+                    if (!node.valueExistence) return emptyList()
+                }
+
+                return node.getValues()
+            } finally {
+                tree.commit()
             }
-
-            return node.getValues()
         }
 
         override fun contains(path: Path): Boolean {
@@ -192,18 +353,22 @@ class FileBasedIndexRegistry(
         private fun <T> Collection<T>.asList(): List<T> = if (this is List<T>) this else toList()
 
         override fun getChildItems(path: Path): List<Pair<String, List<V>>> {
-            var node = root
+            try {
+                var node = root
 
-            for (elem in path) {
-                node = node[elem] ?: return emptyList()
-                if (!node.valueExistence) return emptyList()
+                for (elem in path) {
+                    node = node[elem] ?: return emptyList()
+                    if (!node.valueExistence) return emptyList()
+                }
+
+                return node
+                    .children
+                    .filter { it.value.valueExistence }
+                    .map { it.key to it.value.getValues().asList() }
+                    .sortedBy { it.first }
+            } finally {
+                tree.commit()
             }
-
-            return node
-                .children
-                .filter { it.value.valueExistence }
-                .map { it.key to it.value.getValues().asList() }
-                .sortedBy { it.first }
         }
 
         private fun visitForNextNode(path: Path, onlyRoot: Boolean, node: Node, results: MutableList<V>) {
@@ -229,32 +394,40 @@ class FileBasedIndexRegistry(
         }
 
         override fun searchForPath(path: Path, onlyRoot: Boolean): List<V> {
-            val results: MutableList<V> = mutableListOf()
-            visitForNextNode(path, onlyRoot, root, results)
-            return results
+            try {
+                val results: MutableList<V> = mutableListOf()
+                visitForNextNode(path, onlyRoot, root, results)
+                return results
+            } finally {
+                tree.commit()
+            }
         }
 
         override fun findTopElement(path: Path, predicate: (Path, V) -> Boolean): Pair<Path, V>? {
-            val currentPath = mutableListOf<String>()
-            var node = root
-            if (!node.valueExistence) return null
-
-            for (res in node.getValues()) {
-                if (predicate(emptyList(), res)) return emptyList<String>() to res
-            }
-
-            for (elem in path) {
-                currentPath.add(elem)
-                node = node[elem] ?: return null
+            try {
+                val currentPath = mutableListOf<String>()
+                var node = root
                 if (!node.valueExistence) return null
 
-                val immutableCurrentPath: Path = currentPath.toList()
                 for (res in node.getValues()) {
-                    if (predicate(immutableCurrentPath, res)) return immutableCurrentPath to res
+                    if (predicate(emptyList(), res)) return emptyList<String>() to res
                 }
-            }
 
-            return null
+                for (elem in path) {
+                    currentPath.add(elem)
+                    node = node[elem] ?: return null
+                    if (!node.valueExistence) return null
+
+                    val immutableCurrentPath: Path = currentPath.toList()
+                    for (res in node.getValues()) {
+                        if (predicate(immutableCurrentPath, res)) return immutableCurrentPath to res
+                    }
+                }
+
+                return null
+            } finally {
+                tree.commit()
+            }
         }
     }
 
@@ -305,6 +478,10 @@ class FileBasedIndexRegistry(
             val pointer = entitiesFile.put(value.toPersisted(), PersistedDependency.Serializer)
             incomingDependencies = incomingDependencies.appended(pointer)
         }
+    }
+
+    fun flush() {
+        tree.flush()
     }
 
     override fun close() {

@@ -24,7 +24,7 @@ class PersistedDependency(
             byteToType = typeToByteList.associate { it.second to it.first }
         }
 
-        override fun toBytes(file: SequentialFile, offset: Long, entity: PersistedDependency): SequentialFileSerializer.Result<PersistedDependency> {
+        override fun toBytes(file: SequentialFile, offsetGetter: () -> Long, entity: PersistedDependency): SequentialFileSerializer.Result<PersistedDependency> {
             val pointer = entity.pointer
             if (pointer != null) return pointer.toResult()
 
@@ -34,7 +34,7 @@ class PersistedDependency(
                 data.writeByte(typeToByte[entity.type]!!.toInt())
             }
 
-            entity.pointer = EntityPointer(offset, bytes.size, this)
+            entity.pointer = EntityPointer(offsetGetter(), bytes.size, this)
             return bytes.toResult()
         }
 

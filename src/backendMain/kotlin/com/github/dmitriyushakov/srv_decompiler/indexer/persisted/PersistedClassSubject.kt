@@ -121,7 +121,7 @@ class PersistedClassSubject : ClassSubject {
     object Serializer: SequentialFileSerializer<PersistedClassSubject> {
         private infix fun Int.isSet(mask: Int): Boolean = (this and mask) != 0
         private infix fun Boolean.to(mask: Int): Int = if (this) mask else 0
-        override fun toBytes(file: SequentialFile, offset: Long, entity: PersistedClassSubject): SequentialFileSerializer.Result<PersistedClassSubject> {
+        override fun toBytes(file: SequentialFile, offsetGetter: () -> Long, entity: PersistedClassSubject): SequentialFileSerializer.Result<PersistedClassSubject> {
             val pointer = entity.pointer
             if (pointer != null) return pointer.toResult()
 
@@ -145,7 +145,7 @@ class PersistedClassSubject : ClassSubject {
                 }
             }
 
-            entity.pointer = EntityPointer(offset, bytes.size, this)
+            entity.pointer = EntityPointer(offsetGetter(), bytes.size, this)
             return bytes.toResult()
         }
 

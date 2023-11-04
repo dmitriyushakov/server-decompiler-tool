@@ -62,7 +62,7 @@ class PersistedLocalVariableSubject : LocalVariableSubject {
     override val dependencies: List<PersistedDependency> by Delegates.dependenciesLoadDelegate
 
     object Serializer: SequentialFileSerializer<PersistedLocalVariableSubject> {
-        override fun toBytes(file: SequentialFile, offset: Long, entity: PersistedLocalVariableSubject): SequentialFileSerializer.Result<PersistedLocalVariableSubject> {
+        override fun toBytes(file: SequentialFile, offsetGetter: () -> Long, entity: PersistedLocalVariableSubject): SequentialFileSerializer.Result<PersistedLocalVariableSubject> {
             val pointer = entity.pointer
             if (pointer != null) return pointer.toResult()
 
@@ -76,7 +76,7 @@ class PersistedLocalVariableSubject : LocalVariableSubject {
                 }
             }
 
-            entity.pointer = EntityPointer(offset, bytes.size, this)
+            entity.pointer = EntityPointer(offsetGetter(), bytes.size, this)
             return bytes.toResult()
         }
 

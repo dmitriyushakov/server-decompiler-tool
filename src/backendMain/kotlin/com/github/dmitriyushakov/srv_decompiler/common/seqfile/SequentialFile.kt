@@ -21,8 +21,8 @@ class SequentialFile(file: File, isTemp: Boolean = true): AutoCloseable {
 
     fun <T> put(entity: T, serializer: SequentialFileSerializer<T>): EntityPointer<T> {
         lock.withLock {
+            val result = serializer.toBytes(this, raf::length, entity)
             val rafLength = raf.length()
-            val result = serializer.toBytes(this, rafLength, entity)
 
             val pointer = result.pointer
             if (pointer != null) return pointer

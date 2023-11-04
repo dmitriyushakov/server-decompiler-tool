@@ -73,7 +73,7 @@ class PersistedMethodSubject : MethodSubject {
         throw UnsupportedOperationException("Access to method owner property is not implemented!")
     }
     object Serializer: SequentialFileSerializer<PersistedMethodSubject> {
-        override fun toBytes(file: SequentialFile, offset: Long, entity: PersistedMethodSubject): SequentialFileSerializer.Result<PersistedMethodSubject> {
+        override fun toBytes(file: SequentialFile, offsetGetter: () -> Long, entity: PersistedMethodSubject): SequentialFileSerializer.Result<PersistedMethodSubject> {
             val pointer = entity.pointer
             if (pointer != null) return pointer.toResult()
 
@@ -89,7 +89,7 @@ class PersistedMethodSubject : MethodSubject {
                 }
             }
 
-            entity.pointer = EntityPointer(offset, bytes.size, this)
+            entity.pointer = EntityPointer(offsetGetter(), bytes.size, this)
             return bytes.toResult()
         }
 

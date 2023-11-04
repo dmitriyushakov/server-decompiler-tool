@@ -9,3 +9,9 @@ fun stringsStartIntersectionLength(first: String, second: String): Int {
     }
     return length
 }
+
+fun <K, V> lruCache(maxSize: Int): MutableMap<K, V> = object:LinkedHashMap<K,V>(maxSize * 4 / 3, 0.75f, true) {
+    override fun removeEldestEntry(eldest: Map.Entry<K, V>): Boolean {
+        return size > maxSize
+    }
+}
