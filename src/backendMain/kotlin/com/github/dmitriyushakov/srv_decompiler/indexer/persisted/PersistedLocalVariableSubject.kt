@@ -2,15 +2,17 @@ package com.github.dmitriyushakov.srv_decompiler.indexer.persisted
 
 import com.github.dmitriyushakov.srv_decompiler.common.seqfile.EntityPointer
 import com.github.dmitriyushakov.srv_decompiler.common.seqfile.SequentialFile
+import com.github.dmitriyushakov.srv_decompiler.common.seqfile.SequentialFileSerializable
 import com.github.dmitriyushakov.srv_decompiler.common.seqfile.SequentialFileSerializer
 import com.github.dmitriyushakov.srv_decompiler.indexer.model.LocalVariableSubject
 import com.github.dmitriyushakov.srv_decompiler.indexer.model.MethodSubject
 import com.github.dmitriyushakov.srv_decompiler.indexer.model.Subject
 import com.github.dmitriyushakov.srv_decompiler.utils.data.*
 
-class PersistedLocalVariableSubject : LocalVariableSubject {
+class PersistedLocalVariableSubject : LocalVariableSubject, SequentialFileSerializable<PersistedLocalVariableSubject> {
     private val file: SequentialFile?
-    private var pointer: EntityPointer<PersistedLocalVariableSubject>? = null
+    override var pointer: EntityPointer<PersistedLocalVariableSubject>? = null
+    override val serializer: SequentialFileSerializer<PersistedLocalVariableSubject> get() = Serializer
     override val name: String
     override val descriptor: String
     override val path: List<String>
@@ -62,25 +64,17 @@ class PersistedLocalVariableSubject : LocalVariableSubject {
     override val dependencies: List<PersistedDependency> by Delegates.dependenciesLoadDelegate
 
     object Serializer: SequentialFileSerializer<PersistedLocalVariableSubject> {
-        override fun toBytes(file: SequentialFile, offsetGetter: () -> Long, entity: PersistedLocalVariableSubject): SequentialFileSerializer.Result<PersistedLocalVariableSubject> {
-            val pointer = entity.pointer
-            if (pointer != null) return pointer.toResult()
-
-            val bytes = dataBytes { data ->
-                entity.apply {
-                    data.writeString(name)
-                    data.writeString(descriptor)
-                    data.writeStringsList(path)
-                    dependencies.map { file.put(it, PersistedDependency.Serializer) }.let { data.writeEntityPointersList(it) }
-                    data.writeString(sourcePath)
-                }
+        override fun toBytes(file: SequentialFile, entity: PersistedLocalVariableSubject): ByteArray = dataBytes { data ->
+            entity.apply {
+                data.writeString(name)
+                data.writeString(descriptor)
+                data.writeStringsList(path)
+                dependencies.map { file.put(it, PersistedDependency.Serializer) }.let { data.writeEntityPointersList(it) }
+                data.writeString(sourcePath)
             }
-
-            entity.pointer = EntityPointer(offsetGetter(), bytes.size, this)
-            return bytes.toResult()
         }
 
-        override fun fromBytes(file: SequentialFile, offset: Long, bytes: ByteArray): PersistedLocalVariableSubject {
+        override fun fromBytes(file: SequentialFile, bytes: ByteArray): PersistedLocalVariableSubject {
             val data = bytes.getDataInputStream()
 
             val name = data.readString()
@@ -89,7 +83,7 @@ class PersistedLocalVariableSubject : LocalVariableSubject {
             val dependencies = data.readEntityPointersList(PersistedDependency.Serializer)
             val sourcePath = data.readString()
 
-            val entity = PersistedLocalVariableSubject(
+            return PersistedLocalVariableSubject(
                 file = file,
                 name = name,
                 descriptor = descriptor,
@@ -97,9 +91,6 @@ class PersistedLocalVariableSubject : LocalVariableSubject {
                 dependencies = dependencies,
                 sourcePath = sourcePath
             )
-            entity.pointer = EntityPointer(offset, bytes.size, this)
-
-            return entity
         }
     }
 

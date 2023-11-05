@@ -36,15 +36,11 @@ object ReadingContextSerializer: SequentialFileSerializer<ReadingContext> {
         }
     }
 
-    override fun toBytes(file: SequentialFile, offsetGetter: () -> Long, entity: ReadingContext): SequentialFileSerializer.Result<ReadingContext> {
-        val bytes = dataBytes { data ->
-            visitReadingContextOut(data, entity)
-        }
-
-        return bytes.toResult()
+    override fun toBytes(file: SequentialFile, entity: ReadingContext) = dataBytes { data ->
+        visitReadingContextOut(data, entity)
     }
 
-    override fun fromBytes(file: SequentialFile, offset:Long, bytes: ByteArray): ReadingContext {
+    override fun fromBytes(file: SequentialFile, bytes: ByteArray): ReadingContext {
         var ctx: ReadingContext? = null
 
         val data = bytes.getDataInputStream()

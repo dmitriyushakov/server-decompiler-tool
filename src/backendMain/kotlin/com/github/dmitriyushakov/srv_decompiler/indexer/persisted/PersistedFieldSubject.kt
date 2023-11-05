@@ -2,15 +2,17 @@ package com.github.dmitriyushakov.srv_decompiler.indexer.persisted
 
 import com.github.dmitriyushakov.srv_decompiler.common.seqfile.EntityPointer
 import com.github.dmitriyushakov.srv_decompiler.common.seqfile.SequentialFile
+import com.github.dmitriyushakov.srv_decompiler.common.seqfile.SequentialFileSerializable
 import com.github.dmitriyushakov.srv_decompiler.common.seqfile.SequentialFileSerializer
 import com.github.dmitriyushakov.srv_decompiler.indexer.model.ClassSubject
 import com.github.dmitriyushakov.srv_decompiler.indexer.model.FieldSubject
 import com.github.dmitriyushakov.srv_decompiler.indexer.model.Subject
 import com.github.dmitriyushakov.srv_decompiler.utils.data.*
 
-class PersistedFieldSubject : FieldSubject {
+class PersistedFieldSubject : FieldSubject, SequentialFileSerializable<PersistedFieldSubject> {
     private val file: SequentialFile?
-    private var pointer: EntityPointer<PersistedFieldSubject>? = null
+    override var pointer: EntityPointer<PersistedFieldSubject>? = null
+    override val serializer: SequentialFileSerializer<PersistedFieldSubject> get() = Serializer
 
     override val static: Boolean
     override val name: String
@@ -70,26 +72,18 @@ class PersistedFieldSubject : FieldSubject {
     override val dependencies: List<PersistedDependency> by Delegates.dependenciesLoadDelegate
 
     object Serializer: SequentialFileSerializer<PersistedFieldSubject> {
-        override fun toBytes(file: SequentialFile, offsetGetter: () -> Long, entity: PersistedFieldSubject): SequentialFileSerializer.Result<PersistedFieldSubject> {
-            val pointer = entity.pointer
-            if (pointer != null) return pointer.toResult()
-
-            val bytes = dataBytes { data ->
-                entity.apply {
-                    data.writeBoolean(static)
-                    data.writeString(name)
-                    data.writeString(descriptor)
-                    data.writeStringsList(path)
-                    dependencies.map { file.put(it, PersistedDependency.Serializer) }.let { data.writeEntityPointersList(it) }
-                    data.writeString(sourcePath)
-                }
+        override fun toBytes(file: SequentialFile, entity: PersistedFieldSubject) = dataBytes { data ->
+            entity.apply {
+                data.writeBoolean(static)
+                data.writeString(name)
+                data.writeString(descriptor)
+                data.writeStringsList(path)
+                dependencies.map { file.put(it, PersistedDependency.Serializer) }.let { data.writeEntityPointersList(it) }
+                data.writeString(sourcePath)
             }
-
-            entity.pointer = EntityPointer(offsetGetter(), bytes.size, this)
-            return bytes.toResult()
         }
 
-        override fun fromBytes(file: SequentialFile, offset: Long, bytes: ByteArray): PersistedFieldSubject {
+        override fun fromBytes(file: SequentialFile, bytes: ByteArray): PersistedFieldSubject {
             val data = bytes.getDataInputStream()
             val static = data.readBoolean()
             val name = data.readString()
@@ -98,7 +92,7 @@ class PersistedFieldSubject : FieldSubject {
             val dependencies = data.readEntityPointersList(PersistedDependency.Serializer)
             val sourcePath = data.readString()
 
-            val entity = PersistedFieldSubject(
+            return PersistedFieldSubject(
                 file = file,
                 static = static,
                 name = name,
@@ -107,9 +101,6 @@ class PersistedFieldSubject : FieldSubject {
                 dependencies = dependencies,
                 sourcePath = sourcePath
             )
-
-            entity.pointer = EntityPointer(offset, bytes.size, this)
-            return entity
         }
     }
 

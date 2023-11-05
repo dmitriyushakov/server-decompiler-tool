@@ -19,19 +19,50 @@ class SequentialFile(file: File, isTemp: Boolean = true): AutoCloseable {
         }
     }
 
+    @Suppress("UNCHECKED_CAST")
     fun <T> put(entity: T, serializer: SequentialFileSerializer<T>): EntityPointer<T> {
         lock.withLock {
-            val result = serializer.toBytes(this, raf::length, entity)
+            val bytes = serializer.toBytes(this, entity)
             val rafLength = raf.length()
 
-            val pointer = result.pointer
-            if (pointer != null) return pointer
-
-            val bytes = result.data ?: error("Either pointer or data should be filled!")
             raf.seek(rafLength)
             raf.write(bytes)
 
-            return EntityPointer(rafLength, bytes.size, serializer)
+            val pointer = EntityPointer(rafLength, bytes.size, serializer)
+
+            if (entity is SequentialFileSerializable<*>) {
+                val serializableEntity = entity as SequentialFileSerializable<T>
+                serializableEntity.pointer = pointer
+            }
+
+            return pointer
+        }
+    }
+
+    fun <T: SequentialFileSerializable<T>> put(entity: T): EntityPointer<T> {
+        lock.withLock {
+            val serializer = entity.serializer
+            val bytes = serializer.toBytes(this, entity)
+            val rafLength = raf.length()
+
+            raf.seek(rafLength)
+            raf.write(bytes)
+
+            val pointer = EntityPointer(rafLength, bytes.size, serializer)
+            entity.pointer = pointer
+            return pointer
+        }
+    }
+
+    fun <T: SequentialFileSerializable<T>> get(pointer: EntityPointer<T>): T {
+        lock.withLock {
+            raf.seek(pointer.offset)
+            val bytes = ByteArray(pointer.size)
+            raf.read(bytes)
+
+            val entity = pointer.serializer.fromBytes(this, bytes)
+            entity.pointer = pointer
+            return entity
         }
     }
 
@@ -40,7 +71,8 @@ class SequentialFile(file: File, isTemp: Boolean = true): AutoCloseable {
             raf.seek(pointer.offset)
             val bytes = ByteArray(pointer.size)
             raf.read(bytes)
-            return pointer.serializer.fromBytes(this, pointer.offset, bytes)
+
+            return pointer.serializer.fromBytes(this, bytes)
         }
     }
 

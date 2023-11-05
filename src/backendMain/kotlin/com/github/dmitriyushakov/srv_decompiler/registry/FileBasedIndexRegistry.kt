@@ -436,7 +436,7 @@ class FileBasedIndexRegistry(
     override val subjectsIndex: PathIndex<Subject> = object: AbstractPathIndex<Subject>() {
         override var Node.valueExistence: Boolean by Node::subjectsExists
 
-        override fun Node.getValues() =
+        override fun Node.getValues(): Collection<Subject> =
             listOf(classSubjects, methodSubjects, fieldSubjects, localVariableSubjects)
                 .flatten().map { entitiesFile.get(it) }
 

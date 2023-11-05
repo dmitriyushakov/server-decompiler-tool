@@ -2,11 +2,12 @@ package com.github.dmitriyushakov.srv_decompiler.indexer.persisted
 
 import com.github.dmitriyushakov.srv_decompiler.common.seqfile.EntityPointer
 import com.github.dmitriyushakov.srv_decompiler.common.seqfile.SequentialFile
+import com.github.dmitriyushakov.srv_decompiler.common.seqfile.SequentialFileSerializable
 import kotlin.reflect.KMutableProperty1
 import kotlin.reflect.KProperty
 import kotlin.reflect.KProperty1
 
-class EntitiesListFileLoadDelegate<T, V>(
+class EntitiesListFileLoadDelegate<T, V: SequentialFileSerializable<V>>(
     val fileProperty: KProperty1<T, SequentialFile?>,
     val completeEntitiesProperty: KMutableProperty1<T, List<V>?>,
     val pointersEntitiesProperty: KMutableProperty1<T, List<EntityPointer<V>>?>
