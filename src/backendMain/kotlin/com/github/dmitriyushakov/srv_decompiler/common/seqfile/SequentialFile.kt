@@ -10,7 +10,7 @@ import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 import kotlin.concurrent.withLock
 
-class SequentialFile(file: File, isTemp: Boolean = true, val compression: Boolean = true): AutoCloseable {
+class SequentialFile(file: File, isTemp: Boolean = true, val compression: Boolean = false): AutoCloseable {
     private val lock: Lock = ReentrantLock()
     private val raf: RandomAccessFile
     constructor(filename: String): this(File(filename))

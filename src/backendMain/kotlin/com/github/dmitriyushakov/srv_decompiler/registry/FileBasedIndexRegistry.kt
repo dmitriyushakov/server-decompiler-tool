@@ -28,8 +28,8 @@ class FileBasedIndexRegistry(
 ): IndexRegistry, AutoCloseable {
     private val parsedNodeCache: MutableMap<PayloadKey, ImmutableParsedNodeData> = lruCache(PARSED_NODE_CACHE_SIZE)
     constructor(blockTreeFile: BlockFile, entitiesFile: SequentialFile): this(BlockFileTree(blockTreeFile), entitiesFile)
-    constructor(treeFile: File, entitiesFile: File, isTemp: Boolean = true): this(BlockFile(treeFile, isTemp), SequentialFile(entitiesFile, isTemp))
-    constructor(treeFilename: String, entitiesFilename: String, isTemp: Boolean = true): this(File(treeFilename), File(entitiesFilename), isTemp)
+    constructor(treeFile: File, entitiesFile: File, isTemp: Boolean = true, compress: Boolean = false): this(BlockFile(treeFile, isTemp), SequentialFile(entitiesFile, isTemp, compress))
+    constructor(treeFilename: String, entitiesFilename: String, isTemp: Boolean = true, compress: Boolean = false): this(File(treeFilename), File(entitiesFilename), isTemp, compress)
 
     private class PayloadKey(val payload: ByteArray) {
         override fun hashCode() = payload.contentHashCode()

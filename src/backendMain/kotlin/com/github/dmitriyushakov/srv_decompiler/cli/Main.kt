@@ -1,5 +1,6 @@
 package com.github.dmitriyushakov.srv_decompiler.cli
 
+import com.github.dmitriyushakov.srv_decompiler.indexer.IndexType
 import io.ktor.server.config.*
 import io.ktor.server.config.ConfigLoader.Companion.load
 import io.ktor.server.engine.*
@@ -205,6 +206,9 @@ fun parseArgs(args: Array<String>): CommandLineArguments {
     val sslPort: Int? by parser.option(ArgType.Int, fullName = "sslPort", description = "A listening SSL port")
     val sslKeyStore: String? by parser.option(ArgType.String, fullName = "sslKeyStore", description = "An SSL key store")
     val config: List<String> by parser.option(ArgType.String, fullName = "config", description = "A path to a custom configuration file").multiple()
+    val indexTypeStr: String? by parser.option(ArgType.String, fullName = "index", description = "Index implementation to use. Either - memory, file or temp-file.")
+    val indexFilesPrefix: String? by parser.option(ArgType.String, fullName = "indexFilesPrefix", description = "Prefix for file based index files. Files with *.entities and *.tree extensions will be created.")
+    val compressIndex: Boolean by parser.option(ArgType.Boolean, fullName = "compressIndex", description = "Enables GZIP compression for index *.entities file.").default(false)
     val commandLineProperties: MutableList<Pair<String, String>> = mutableListOf()
 
     val newArgs: MutableList<String> = mutableListOf()
@@ -220,6 +224,14 @@ fun parseArgs(args: Array<String>): CommandLineArguments {
 
     parser.parse(newArgs.toTypedArray())
 
+    val indexType: IndexType = when(indexTypeStr) {
+        "memory" -> IndexType.InMemory
+        "file" -> IndexType.FileBased
+        "temp-file" -> IndexType.FileBasedTemp
+        null -> if (indexFilesPrefix == null) IndexType.InMemory else IndexType.FileBased
+        else -> error("Unknown index type specified - $indexTypeStr")
+    }
+
     return CommandLineArguments(
         paths = paths,
         host = host,
@@ -227,7 +239,10 @@ fun parseArgs(args: Array<String>): CommandLineArguments {
         sslPort = sslPort,
         sslKeyStore = sslKeyStore,
         config = config,
-        commandLineProperties = commandLineProperties
+        commandLineProperties = commandLineProperties,
+        indexType = indexType,
+        indexFilesPrefix = indexFilesPrefix,
+        compressIndex = compressIndex
     )
 }
 

@@ -1,5 +1,6 @@
 package com.github.dmitriyushakov.srv_decompiler.indexer
 
+import com.github.dmitriyushakov.srv_decompiler.cli.cli
 import com.github.dmitriyushakov.srv_decompiler.common.Interner
 import com.github.dmitriyushakov.srv_decompiler.indexer.asm.ClassIndexVisitor
 import com.github.dmitriyushakov.srv_decompiler.indexer.model.Subject
@@ -191,11 +192,11 @@ private fun indexToInMemoryIndex(paths: List<String>) {
 }
 
 private fun indexToFileBasedIndex(paths: List<String>, temporary: Boolean) {
-    val indexFilesPrefix = "./index_registry"
+    val indexFilesPrefix = cli.indexFilesPrefix ?: "./decompiler_index_registry"
     val treeFile = File("$indexFilesPrefix.tree")
     val entitiesFile = File("$indexFilesPrefix.entities")
     val alreadyExists = treeFile.exists() && entitiesFile.exists()
-    val newRegistry = FileBasedIndexRegistry(treeFile, entitiesFile, temporary)
+    val newRegistry = FileBasedIndexRegistry(treeFile, entitiesFile, temporary, cli.compressIndex)
     if (!alreadyExists || temporary) {
         try {
             indexClasses(newRegistry, paths)
