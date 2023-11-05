@@ -1,12 +1,16 @@
 package com.github.dmitriyushakov.srv_decompiler.common.seqfile
 
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.RandomAccessFile
 import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantLock
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 import kotlin.concurrent.withLock
 
-class SequentialFile(file: File, isTemp: Boolean = true): AutoCloseable {
+class SequentialFile(file: File, isTemp: Boolean = true, val compression: Boolean = true): AutoCloseable {
     private val lock: Lock = ReentrantLock()
     private val raf: RandomAccessFile
     constructor(filename: String): this(File(filename))
@@ -19,10 +23,26 @@ class SequentialFile(file: File, isTemp: Boolean = true): AutoCloseable {
         }
     }
 
+    private fun ByteArray.compress(): ByteArray {
+        if (!compression) return this
+        val baos = ByteArrayOutputStream()
+        val baosGz = GZIPOutputStream(baos)
+        baosGz.write(this)
+        baosGz.close()
+        return baos.toByteArray()
+    }
+
+    private fun ByteArray.decompress(): ByteArray {
+        if (!compression) return this
+        val bain = ByteArrayInputStream(this)
+        val bainGz = GZIPInputStream(bain)
+        return bainGz.readAllBytes()
+    }
+
     @Suppress("UNCHECKED_CAST")
     fun <T> put(entity: T, serializer: SequentialFileSerializer<T>): EntityPointer<T> {
         lock.withLock {
-            val bytes = serializer.toBytes(this, entity)
+            val bytes = serializer.toBytes(this, entity).compress()
             val rafLength = raf.length()
 
             raf.seek(rafLength)
@@ -42,7 +62,7 @@ class SequentialFile(file: File, isTemp: Boolean = true): AutoCloseable {
     fun <T: SequentialFileSerializable<T>> put(entity: T): EntityPointer<T> {
         lock.withLock {
             val serializer = entity.serializer
-            val bytes = serializer.toBytes(this, entity)
+            val bytes = serializer.toBytes(this, entity).compress()
             val rafLength = raf.length()
 
             raf.seek(rafLength)
@@ -60,7 +80,7 @@ class SequentialFile(file: File, isTemp: Boolean = true): AutoCloseable {
             val bytes = ByteArray(pointer.size)
             raf.read(bytes)
 
-            val entity = pointer.serializer.fromBytes(this, bytes)
+            val entity = pointer.serializer.fromBytes(this, bytes.decompress())
             entity.pointer = pointer
             return entity
         }
@@ -72,7 +92,7 @@ class SequentialFile(file: File, isTemp: Boolean = true): AutoCloseable {
             val bytes = ByteArray(pointer.size)
             raf.read(bytes)
 
-            return pointer.serializer.fromBytes(this, bytes)
+            return pointer.serializer.fromBytes(this, bytes.decompress())
         }
     }
 
