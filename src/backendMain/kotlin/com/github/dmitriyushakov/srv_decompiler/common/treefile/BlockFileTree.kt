@@ -5,6 +5,8 @@ import com.github.dmitriyushakov.srv_decompiler.utils.data.dataBytes
 import com.github.dmitriyushakov.srv_decompiler.utils.data.getDataInputStream
 import java.io.File
 
+private const val NODE_CACHE_SIZE: Int = 1000
+
 class BlockFileTree(val blockFile: BlockFile): TreeFile, AutoCloseable {
     private class ByteArrayKey(val arr: ByteArray) {
         override fun hashCode(): Int = arr.sumOf { it.toInt() }
@@ -17,16 +19,17 @@ class BlockFileTree(val blockFile: BlockFile): TreeFile, AutoCloseable {
     private fun ByteArray.asKey() = ByteArrayKey(this)
 
     private inner class BlockFileNode(
-        var index: Int? = null,
+        var index: Int?,
+        var modified: Boolean,
         kvPairs: List<Pair<ByteArray, Int>>,
-        payload: ByteArray
+        payload: LazyPayload
     ): TreeFile.Node {
-        private var modified = index == null
 
-        override var payload: ByteArray = payload
+
+        override var payload: LazyPayload = payload
             set(value) {
                 synchronized(this) {
-                    modified = modified || !(field contentEquals value)
+                    modified = modified || field != value
                     field = value
                 }
             }
@@ -37,65 +40,63 @@ class BlockFileTree(val blockFile: BlockFile): TreeFile, AutoCloseable {
                 field = value
             }
 
-        private val loadedNodes: MutableList<Pair<ByteArray, BlockFileNode>> = mutableListOf()
+        private val newNodes: MutableList<Pair<ByteArray, BlockFileNode>> = mutableListOf()
 
         override val keys: List<ByteArray> get() = kvPairs.map { it.first }
 
         private fun synchronizedGet(key: ByteArray): TreeFile.Node? {
             synchronized(this) {
-                val loadedNode = loadedNodes.firstOrNull { it.first contentEquals key }?.second
-                if (loadedNode != null) return loadedNode
+                val newNode = newNodes.firstOrNull { it.first contentEquals key }?.second
+                if (newNode != null) return newNode
 
                 val nodeIndex = kvPairs.firstOrNull { it.first contentEquals key }?.second ?: return null
-                val newLoadedNode = loadNode(nodeIndex)
-                loadedNodes.add(key to newLoadedNode)
-                return newLoadedNode
+                val loadedNode = getNode(nodeIndex)
+                return loadedNode
             }
         }
 
         override operator fun get(key: ByteArray): TreeFile.Node? {
-            val firstAttempt = loadedNodes.firstOrNull { it.first contentEquals key }?.second
-            if (firstAttempt != null) return firstAttempt
-
             return synchronizedGet(key)
         }
 
         override fun getOrCreate(key: ByteArray): TreeFile.Node {
-            val firstAttempt = loadedNodes.firstOrNull { it.first contentEquals key }?.second
-            if (firstAttempt != null) return firstAttempt
-
             synchronized(this) {
                 val node = synchronizedGet(key)
                 if (node != null) return  node
 
-                val newNode = BlockFileNode(null, emptyList(), ByteArray(0))
-                loadedNodes.add(key to newNode)
+                val newNode = BlockFileNode(null, true, emptyList(), LazyPayload.Empty)
+                newNodes.add(key to newNode)
+                modified = true
                 return newNode
             }
         }
 
         fun commit() {
             synchronized(this) {
-                val oldKeys = kvPairs.map { it.first.asKey() }.toSet()
                 val newKvPairs = kvPairs.toMutableList()
                 var kvPairsUpdated = false
 
-                for ((key, node) in loadedNodes) {
+                for ((key, node) in newNodes) {
                     node.commit()
                     val nodeIdx = node.index ?: error("Not null index expected after node commit!")
-                    if (key.asKey() !in oldKeys) {
-                        newKvPairs.add(key to nodeIdx)
-                        kvPairsUpdated = true
-                    }
+                    newKvPairs.add(key to nodeIdx)
+                    kvPairsUpdated = true
                 }
-
-                if (kvPairsUpdated) kvPairs = newKvPairs
+                if (kvPairsUpdated) {
+                    newNodes.clear()
+                    kvPairs = newKvPairs
+                }
                 if (modified) {
                     storeNode(this)
                     modified = false
+                    nodeCache[index!!] = this
                 }
             }
         }
+    }
+
+    private fun getNode(index: Int): BlockFileNode {
+        return nodeCache.computeIfAbsent(index, ::loadNode)
     }
 
     private fun loadNode(index: Int): BlockFileNode {
@@ -112,10 +113,8 @@ class BlockFileTree(val blockFile: BlockFile): TreeFile, AutoCloseable {
             kvPairs.add(key to kvIndex)
         }
 
-        val payload = data.readAllBytes()
-        val node = BlockFileNode(index, kvPairs, payload)
-
-        return node
+        val payload = data.readAllBytes().let(::LoadedPayload)
+        return BlockFileNode(index, false, kvPairs, payload)
     }
 
     private fun storeNode(node: BlockFileNode) {
@@ -128,7 +127,7 @@ class BlockFileTree(val blockFile: BlockFile): TreeFile, AutoCloseable {
                 data.writeInt(idx)
             }
 
-            data.write(node.payload)
+            data.write(node.payload())
         }
 
         val idx = node.index
@@ -139,6 +138,7 @@ class BlockFileTree(val blockFile: BlockFile): TreeFile, AutoCloseable {
         }
     }
 
+    private val nodeCache = LinkedHashMap<Int, BlockFileNode>(NODE_CACHE_SIZE * 4 / 3, 0.75f, true)
 
     constructor(file: File, isTemp: Boolean = true): this(BlockFile(file, isTemp))
     constructor(filename: String, isTemp: Boolean = true): this(File(filename), isTemp)
@@ -155,12 +155,13 @@ class BlockFileTree(val blockFile: BlockFile): TreeFile, AutoCloseable {
                 if (root != null) return root
 
                 if (blockFile.size == 0) {
-                    val initialRoot = BlockFileNode(0, emptyList(), ByteArray(0))
+                    val initialRoot = BlockFileNode(0, true, emptyList(), LazyPayload.Empty)
                     initialRoot.commit()
+                    nodeCache[0] = initialRoot
                     loadedRoot = initialRoot
                     return initialRoot
                 } else {
-                    val loadedRoot = loadNode(0)
+                    val loadedRoot = getNode(0)
                     this.loadedRoot = loadedRoot
                     return loadedRoot
                 }
@@ -175,7 +176,16 @@ class BlockFileTree(val blockFile: BlockFile): TreeFile, AutoCloseable {
 
     override fun commit() {
         synchronized(this) {
-            loadedRoot?.commit()
+            val nodesToCommit: List<BlockFileNode>
+            if (nodeCache.size > NODE_CACHE_SIZE) {
+                val trimNodesCount = nodeCache.size - NODE_CACHE_SIZE
+                val indicesToRemove = nodeCache.keys.take(trimNodesCount)
+                nodesToCommit = nodeCache.values.filter { it.modified }
+                for (idx in indicesToRemove) nodeCache.remove(idx)
+            } else {
+                nodesToCommit = nodeCache.values.filter { it.modified }
+            }
+            for (node in nodesToCommit) node.commit()
             loadedRoot = null
         }
     }

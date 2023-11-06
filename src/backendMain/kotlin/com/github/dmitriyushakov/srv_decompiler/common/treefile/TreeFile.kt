@@ -3,7 +3,7 @@ package com.github.dmitriyushakov.srv_decompiler.common.treefile
 interface TreeFile: AutoCloseable {
     interface Node {
         val keys: List<ByteArray>
-        var payload: ByteArray
+        var payload: LazyPayload
 
         operator fun get(key: ByteArray): Node?
         fun getOrCreate(key: ByteArray): Node
