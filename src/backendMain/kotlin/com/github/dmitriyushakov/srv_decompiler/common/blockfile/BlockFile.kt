@@ -1,5 +1,6 @@
 package com.github.dmitriyushakov.srv_decompiler.common.blockfile
 
+import com.github.dmitriyushakov.srv_decompiler.common.FilesShutdownActions
 import java.io.File
 import java.io.RandomAccessFile
 import java.util.*
@@ -28,9 +29,11 @@ class BlockFile(file: File, isTemp: Boolean = true): AutoCloseable {
 
     init {
         raf = RandomAccessFile(file, "rw")
+        FilesShutdownActions.toClose(raf)
         if (isTemp) {
             raf.setLength(0L)
             file.deleteOnExit()
+            FilesShutdownActions.toDelete(file)
         }
         blocksCount = (raf.length() / BLOCK_SIZE).toInt()
     }

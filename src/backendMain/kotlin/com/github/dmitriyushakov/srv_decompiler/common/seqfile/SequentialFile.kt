@@ -1,5 +1,6 @@
 package com.github.dmitriyushakov.srv_decompiler.common.seqfile
 
+import com.github.dmitriyushakov.srv_decompiler.common.FilesShutdownActions
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -17,9 +18,11 @@ class SequentialFile(file: File, isTemp: Boolean = true, val compression: Boolea
 
     init {
         raf = RandomAccessFile(file, "rw")
+        FilesShutdownActions.toClose(raf)
         if (isTemp) {
             raf.setLength(0)
             file.deleteOnExit()
+            FilesShutdownActions.toDelete(file)
         }
     }
 
