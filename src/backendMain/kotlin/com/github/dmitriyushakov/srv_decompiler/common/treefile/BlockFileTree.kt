@@ -5,7 +5,7 @@ import com.github.dmitriyushakov.srv_decompiler.utils.data.dataBytes
 import com.github.dmitriyushakov.srv_decompiler.utils.data.getDataInputStream
 import java.io.File
 
-private const val NODE_CACHE_SIZE: Int = 1000
+private const val NODE_CACHE_SIZE: Int = 100
 
 class BlockFileTree(val blockFile: BlockFile): TreeFile, AutoCloseable {
     private class ByteArrayKey(val arr: ByteArray) {
@@ -71,7 +71,7 @@ class BlockFileTree(val blockFile: BlockFile): TreeFile, AutoCloseable {
             }
         }
 
-        fun commit() {
+        fun commit(partial: Boolean = false) {
             synchronized(this) {
                 val newKvPairs = kvPairs.toMutableList()
                 var kvPairsUpdated = false
@@ -86,7 +86,7 @@ class BlockFileTree(val blockFile: BlockFile): TreeFile, AutoCloseable {
                     newNodes.clear()
                     kvPairs = newKvPairs
                 }
-                if (modified) {
+                if (modified && (!partial || index == null)) {
                     storeNode(this)
                     modified = false
                     nodeCache[index!!] = this
@@ -170,11 +170,12 @@ class BlockFileTree(val blockFile: BlockFile): TreeFile, AutoCloseable {
 
     override fun flush() {
         synchronized(this) {
+            fullCommit()
             blockFile.flush()
         }
     }
 
-    override fun commit() {
+    private fun fullCommit() {
         synchronized(this) {
             val nodesToCommit: List<BlockFileNode>
             if (nodeCache.size > NODE_CACHE_SIZE) {
@@ -186,6 +187,22 @@ class BlockFileTree(val blockFile: BlockFile): TreeFile, AutoCloseable {
                 nodesToCommit = nodeCache.values.filter { it.modified }
             }
             for (node in nodesToCommit) node.commit()
+            loadedRoot = null
+        }
+    }
+
+    override fun commit() {
+        synchronized(this) {
+            val nodesToCommit: List<BlockFileNode>
+            if (nodeCache.size > NODE_CACHE_SIZE) {
+                val trimNodesCount = nodeCache.size - NODE_CACHE_SIZE
+                val indicesToRemove = nodeCache.values.filter { !it.modified }.mapNotNull { it.index }.take(trimNodesCount)
+                nodesToCommit = nodeCache.values.filter { it.modified }
+                for (idx in indicesToRemove) nodeCache.remove(idx)
+            } else {
+                nodesToCommit = nodeCache.values.filter { it.modified }
+            }
+            for (node in nodesToCommit) node.commit(partial = nodesToCommit.size < NODE_CACHE_SIZE / 2)
             loadedRoot = null
         }
     }
