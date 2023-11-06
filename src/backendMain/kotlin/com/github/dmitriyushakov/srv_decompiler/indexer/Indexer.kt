@@ -177,18 +177,31 @@ private fun indexClasses(newRegistry: IndexRegistry, paths: List<String>) {
     }
 
     indexerStatus = IndexerStatus(
-        running = false,
-        finished = true,
+        running = true,
+        finished = false,
         currentPath = null,
         fileNumber = targetsCount,
         filesCount = targetsCount
     )
 }
 
+fun setIndexerStatusToFinish() {
+    indexerStatus = indexerStatus.let {
+        IndexerStatus(
+            running = false,
+            finished = true,
+            currentPath = it.currentPath,
+            fileNumber = it.fileNumber,
+            filesCount = it.filesCount
+        )
+    }
+}
+
 private fun indexToInMemoryIndex(paths: List<String>) {
     val newRegistry = MergedTreeIndexRegistry()
     indexClasses(newRegistry, paths)
     globalIndexRegistry = newRegistry
+    setIndexerStatusToFinish()
 }
 
 private fun indexToFileBasedIndex(paths: List<String>, temporary: Boolean) {
@@ -214,6 +227,7 @@ private fun indexToFileBasedIndex(paths: List<String>, temporary: Boolean) {
     }
     newRegistry.flush()
     globalIndexRegistry = newRegistry
+    setIndexerStatusToFinish()
 }
 
 fun startIndexation(indexType: IndexType, paths: List<String>) {

@@ -48,7 +48,7 @@ class IndexerStatusTab: BasicTab("indexer-status-tab") {
 
         API.Indexer.receiveStatus { status ->
             indexerStatusObservableValue.setState(status)
-            if (!status.finished && !opened) {
+            if (status.running && !opened) {
                 opened = true
                 openRequest?.invoke()
             }
