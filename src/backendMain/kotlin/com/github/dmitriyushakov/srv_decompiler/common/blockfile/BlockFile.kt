@@ -15,7 +15,7 @@ private const val DATA_LENGTH_OFFSET: Int = BLOCK_FLAGS_OFFSET + Byte.SIZE_BYTES
 private const val NEXT_BLOCK_INDEX_OFFSET: Int = DATA_LENGTH_OFFSET + Int.SIZE_BYTES
 private const val PAYLOAD_OFFSET: Int = NEXT_BLOCK_INDEX_OFFSET + Int.SIZE_BYTES
 private const val PAYLOAD_SIZE: Int = BLOCK_SIZE - PAYLOAD_OFFSET
-private const val DIRTY_BLOCKS_TO_FLUSH: Int = 10000
+private const val DIRTY_BLOCKS_TO_FLUSH: Int = 500000
 private const val MULTI_BLOCK_FLUSH_COUNT: Int = 40960
 
 class BlockFile(file: File, isTemp: Boolean = true): AutoCloseable {
