@@ -20,6 +20,7 @@ class MergedTreeIndexRegistry: MergedMapTreePathIndex<MergedTreeIndexRegistry.Tr
     override val subjectsIndex: PathIndex<Subject> = ParticularPathIndex(rootNode, TreeNode::subjects, TreeNode::subjectsExists, ::arrayOfNulls)
     override val outgoingDependenciesIndex: PathIndex<Dependency> = ParticularPathIndex(rootNode, TreeNode::outgoingDependencies, TreeNode::outgoingDependenciesExists, ::arrayOfNulls)
     override val incomingDependenciesIndex: PathIndex<Dependency> = ParticularPathIndex(rootNode, TreeNode::incomingDependencies, TreeNode::incomingDependenciesExists, ::arrayOfNulls)
+    override fun commit() {}
 
     private object TreeNodeCreator: () -> TreeNode {
         override fun invoke() = TreeNode(this)

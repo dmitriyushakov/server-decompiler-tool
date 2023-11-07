@@ -17,6 +17,7 @@ import java.util.*
 import kotlin.reflect.KMutableProperty0
 import kotlin.reflect.KMutableProperty1
 import kotlin.reflect.KProperty
+import kotlin.reflect.KProperty0
 
 private const val SUBJECTS_EXIST_FLAG = 0b001
 private const val OUTGOING_DEPENDENCIES_EXIST_FLAG = 0b010
@@ -26,6 +27,7 @@ class FileBasedIndexRegistry(
     private val tree: TreeFile,
     private val entitiesFile: SequentialFile
 ): IndexRegistry, AutoCloseable {
+    var autocommit: Boolean = false
     constructor(blockTreeFile: BlockFile, entitiesFile: SequentialFile): this(BlockFileTree(blockTreeFile), entitiesFile)
     constructor(treeFile: File, entitiesFile: File, isTemp: Boolean = true, compress: Boolean = false): this(BlockFile(treeFile, isTemp), SequentialFile(entitiesFile, isTemp, compress))
     constructor(treeFilename: String, entitiesFilename: String, isTemp: Boolean = true, compress: Boolean = false): this(File(treeFilename), File(entitiesFilename), isTemp, compress)
@@ -187,12 +189,13 @@ class FileBasedIndexRegistry(
     }
 
     private inner class LazyParsedNodeDataDelegate<V>(
-        private val backNode: TreeFile.Node,
+        private val backNodeProperty: KProperty0<TreeFile.Node>,
         private val parsedNodeProperty: KMutableProperty0<ParsedNodeData?>,
         private val dataProperty: KMutableProperty1<ParsedNodeData, V>) {
         private fun getParsedData(): ParsedNodeData {
             val parsedNode = parsedNodeProperty.get()
             if (parsedNode == null) {
+                val backNode = backNodeProperty.get()
                 val newParsedNode = parseNode(backNode.payload).bindToPhysicalNode(backNode)
                 parsedNodeProperty.set(newParsedNode)
                 return newParsedNode
@@ -210,32 +213,38 @@ class FileBasedIndexRegistry(
     }
 
     private inner class Node (
-        private val backNode: TreeFile.Node
+        backNodeSupplier: () -> TreeFile.Node
     ) {
+        private val backNode by lazy(backNodeSupplier)
         private var parsedNodeData: ParsedNodeData? = null
         private fun <V> lazyData(dataProperty: KMutableProperty1<ParsedNodeData, V>) =
-            LazyParsedNodeDataDelegate(backNode, this::parsedNodeData, dataProperty)
+            LazyParsedNodeDataDelegate(this::backNode, this::parsedNodeData, dataProperty)
 
-        val children: Map<String, Node> get() {
+        val childrenMut: MutableMap<String, Node> by lazy { calculateChildren() }
+        val children: Map<String, Node> get() = childrenMut.toMap()
+
+        private fun calculateChildren(): MutableMap<String, Node> {
             val resultMap: MutableMap<String, Node> = mutableMapOf()
 
             for (keyBytes in backNode.keys) {
                 val key = String(keyBytes)
-                val node = Node(backNode.get(keyBytes)!!)
+                val node = Node { backNode[keyBytes]!! }
                 resultMap[key] = node
             }
 
-            return  resultMap
+            return resultMap
         }
 
         operator fun get(key: String): Node? {
-            val keyBytes = key.toByteArray()
-            return backNode[keyBytes]?.let(::Node)
+            return childrenMut[key]
         }
 
         fun getOrCreate(key: String): Node {
-            val keyBytes = key.toByteArray()
-            return Node(backNode.getOrCreate(keyBytes))
+            return childrenMut.computeIfAbsent(key) { mapKey ->
+                Node {
+                    backNode.getOrCreate(mapKey.toByteArray())
+                }
+            }
         }
 
         var classSubjects: List<EntityPointer<PersistedClassSubject>> by lazyData(ParsedNodeData::classSubjects)
@@ -294,7 +303,19 @@ class FileBasedIndexRegistry(
         )
     }
 
-    private val root: Node get() = Node(tree.root)
+    private var currentRoot: Node? = null
+    private val root: Node get() {
+        val currentRoot = this.currentRoot
+        if (currentRoot != null) return currentRoot
+        synchronized(this) {
+            val secondAttemptNode = this.currentRoot
+            if (secondAttemptNode != null) return secondAttemptNode
+
+            val newRootNode = Node { tree.root }
+            this.currentRoot = newRootNode
+            return newRootNode
+        }
+    }
 
     private abstract inner class AbstractPathIndex<V>: PathIndex<V> {
         protected abstract var Node.valueExistence: Boolean
@@ -313,7 +334,7 @@ class FileBasedIndexRegistry(
 
                 node.addValue(value)
             } finally {
-                tree.commit()
+                if (autocommit) commit()
             }
         }
 
@@ -328,7 +349,7 @@ class FileBasedIndexRegistry(
 
                 return node.getValues()
             } finally {
-                tree.commit()
+                if (autocommit) commit()
             }
         }
 
@@ -353,7 +374,7 @@ class FileBasedIndexRegistry(
                     .map { it.key to it.value.getValues().asList() }
                     .sortedBy { it.first }
             } finally {
-                tree.commit()
+                if (autocommit) commit()
             }
         }
 
@@ -385,7 +406,7 @@ class FileBasedIndexRegistry(
                 visitForNextNode(path, onlyRoot, root, results)
                 return results
             } finally {
-                tree.commit()
+                if (autocommit) commit()
             }
         }
 
@@ -412,7 +433,7 @@ class FileBasedIndexRegistry(
 
                 return null
             } finally {
-                tree.commit()
+                if (autocommit) commit()
             }
         }
     }
@@ -464,6 +485,11 @@ class FileBasedIndexRegistry(
             val pointer = entitiesFile.put(value.toPersisted(), PersistedDependency.Serializer)
             incomingDependencies = incomingDependencies.appended(pointer)
         }
+    }
+
+    override fun commit() {
+        tree.commit()
+        currentRoot = null
     }
 
     fun flush() {

@@ -61,42 +61,48 @@ class BlockFileTree(val blockFile: BlockFile): TreeFile, AutoCloseable {
 
         override fun getOrCreate(key: ByteArray): TreeFile.Node {
             synchronized(this) {
-                val node = synchronizedGet(key)
-                if (node != null) return  node
+                synchronized(this@BlockFileTree) {
+                    val node = synchronizedGet(key)
+                    if (node != null) return node
 
-                val newNode = BlockFileNode(null, true, emptyList(), LazyPayload.Empty)
-                newNodes.add(key to newNode)
-                modified = true
-                return newNode
+                    val newNode = BlockFileNode(null, true, emptyList(), LazyPayload.Empty)
+                    newNodes.add(key to newNode)
+                    modified = true
+                    return newNode
+                }
             }
         }
 
         fun commit(partial: Boolean = false) {
             synchronized(this) {
-                val newKvPairs = kvPairs.toMutableList()
-                var kvPairsUpdated = false
+                synchronized(this@BlockFileTree) {
+                    val newKvPairs = kvPairs.toMutableList()
+                    var kvPairsUpdated = false
 
-                for ((key, node) in newNodes) {
-                    node.commit()
-                    val nodeIdx = node.index ?: error("Not null index expected after node commit!")
-                    newKvPairs.add(key to nodeIdx)
-                    kvPairsUpdated = true
-                }
-                if (kvPairsUpdated) {
-                    newNodes.clear()
-                    kvPairs = newKvPairs
-                }
-                if (modified && (!partial || index == null)) {
-                    storeNode(this)
-                    modified = false
-                    nodeCache[index!!] = this
+                    for ((key, node) in newNodes) {
+                        node.commit()
+                        val nodeIdx = node.index ?: error("Not null index expected after node commit!")
+                        newKvPairs.add(key to nodeIdx)
+                        kvPairsUpdated = true
+                    }
+                    if (kvPairsUpdated) {
+                        newNodes.clear()
+                        kvPairs = newKvPairs
+                    }
+                    if (modified && (!partial || index == null)) {
+                        storeNode(this)
+                        modified = false
+                        nodeCache[index!!] = this
+                    }
                 }
             }
         }
     }
 
     private fun getNode(index: Int): BlockFileNode {
-        return nodeCache.computeIfAbsent(index, ::loadNode)
+        synchronized(this@BlockFileTree) {
+            return nodeCache.computeIfAbsent(index, ::loadNode)
+        }
     }
 
     private fun loadNode(index: Int): BlockFileNode {

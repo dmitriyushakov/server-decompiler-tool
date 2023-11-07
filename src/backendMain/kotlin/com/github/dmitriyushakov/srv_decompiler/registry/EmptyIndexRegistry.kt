@@ -19,4 +19,5 @@ object EmptyIndexRegistry: IndexRegistry {
     override val subjectsIndex: PathIndex<Subject> = EmptyPathIndex()
     override val outgoingDependenciesIndex: PathIndex<Dependency> = EmptyPathIndex()
     override val incomingDependenciesIndex: PathIndex<Dependency> = EmptyPathIndex()
+    override fun commit() {}
 }

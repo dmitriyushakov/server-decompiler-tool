@@ -209,7 +209,7 @@ class BlockFile(file: File, isTemp: Boolean = true): AutoCloseable {
         }
     }
 
-    val size: Int get() = (raf.length() / BLOCK_SIZE).toInt()
+    val size: Int get() = blocksCount
 
     override fun close() {
         raf.close()

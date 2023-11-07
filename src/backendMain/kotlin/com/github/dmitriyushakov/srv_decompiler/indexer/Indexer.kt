@@ -18,11 +18,14 @@ import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipInputStream
 
 private class Indexer
 
 private val logger = LoggerFactory.getLogger(Indexer::class.java)
+
+private const val CLASSES_NUMBER_TO_COMMIT = 100
 
 private const val CLASS_EXT = ".class"
 private const val JAR_EXT = ".jar"
@@ -88,27 +91,31 @@ private fun IndexRegistry.indexForSubject(subject: Subject) {
     }
 }
 
-private fun IndexRegistry.indexForClass(inputStream: InputStream, readingContext: ReadingContext, stringInterner: Interner<String>) {
+private fun IndexRegistry.indexForClass(inputStream: InputStream, readingContext: ReadingContext, stringInterner: Interner<String>, insertedToCommitCounter: AtomicInteger) {
     try {
         val classVisitor = ClassIndexVisitor(Opcodes.ASM9, readingContext)
         val classReader = ClassReader(inputStream)
         classReader.accept(classVisitor, ClassReader.SKIP_FRAMES)
         val classSubject = classVisitor.toClassSubject(stringInterner)
 
+        if (insertedToCommitCounter.incrementAndGet() >= CLASSES_NUMBER_TO_COMMIT) {
+            insertedToCommitCounter.addAndGet(-CLASSES_NUMBER_TO_COMMIT)
+            commit()
+        }
         indexForSubject(classSubject)
     } catch (ex: Exception) {
         logger.error("Exception occurred during indexing class \"${readingContext.readingDataPath}\" - ", ex)
     }
 }
 
-private fun IndexRegistry.indexForClassFile(path: String, stringInterner: Interner<String>) {
+private fun IndexRegistry.indexForClassFile(path: String, stringInterner: Interner<String>, insertedToCommitCounter: AtomicInteger) {
     FileInputStream(path).use { fileInputStream ->
         val bufferedFileInputStream = BufferedInputStream(fileInputStream)
-        indexForClass(bufferedFileInputStream, FileReadingContext(path), stringInterner)
+        indexForClass(bufferedFileInputStream, FileReadingContext(path), stringInterner, insertedToCommitCounter)
     }
 }
 
-private fun IndexRegistry.indexForZipInputStream(zipInputStream: ZipInputStream, readingContext: ReadingContext, stringInterner: Interner<String>) {
+private fun IndexRegistry.indexForZipInputStream(zipInputStream: ZipInputStream, readingContext: ReadingContext, stringInterner: Interner<String>, insertedToCommitCounter: AtomicInteger) {
     var entry = zipInputStream.getNextEntry()
 
     while (entry != null) {
@@ -116,10 +123,10 @@ private fun IndexRegistry.indexForZipInputStream(zipInputStream: ZipInputStream,
         val zipEntryReadingContext = ZipEntryReadingContext(entry.name, readingContext)
 
         if (lowerEntryName.endsWith(CLASS_EXT)) {
-            indexForClass(zipInputStream, zipEntryReadingContext, stringInterner)
+            indexForClass(zipInputStream, zipEntryReadingContext, stringInterner, insertedToCommitCounter)
         } else if(lowerEntryName.endsWith(JAR_EXT) || lowerEntryName.endsWith(WAR_EXT)) {
             val nestedZipInputStream = ZipInputStream(zipInputStream)
-            indexForZipInputStream(nestedZipInputStream, zipEntryReadingContext, stringInterner)
+            indexForZipInputStream(nestedZipInputStream, zipEntryReadingContext, stringInterner, insertedToCommitCounter)
         }
 
         zipInputStream.closeEntry()
@@ -127,12 +134,12 @@ private fun IndexRegistry.indexForZipInputStream(zipInputStream: ZipInputStream,
     }
 }
 
-private fun IndexRegistry.indexForJarFile(path: String, stringInterner: Interner<String>) {
+private fun IndexRegistry.indexForJarFile(path: String, stringInterner: Interner<String>, insertedToCommitCounter: AtomicInteger) {
     FileInputStream(path).use { fileInputStream ->
         val bufferedFileInputStream = BufferedInputStream(fileInputStream)
 
         ZipInputStream(bufferedFileInputStream).use { zipInputStream ->
-            indexForZipInputStream(zipInputStream, FileReadingContext(path), stringInterner)
+            indexForZipInputStream(zipInputStream, FileReadingContext(path), stringInterner, insertedToCommitCounter)
         }
     }
 }
@@ -151,6 +158,7 @@ private fun indexClasses(newRegistry: IndexRegistry, paths: List<String>) {
 
     val stringInterner: Interner<String> = Interner()
 
+    val insertedToCommitCounter = AtomicInteger(0)
     for ((idx, target) in indexingTargets.withIndex()) {
         if (logger.isDebugEnabled) {
             val fileType = when(target.type) {
@@ -171,10 +179,11 @@ private fun indexClasses(newRegistry: IndexRegistry, paths: List<String>) {
         )
 
         when (target.type) {
-            IndexingTargetType.ClassFile -> newRegistry.indexForClassFile(target.path, stringInterner)
-            IndexingTargetType.WarFile, IndexingTargetType.JarFile -> newRegistry.indexForJarFile(target.path, stringInterner)
+            IndexingTargetType.ClassFile -> newRegistry.indexForClassFile(target.path, stringInterner, insertedToCommitCounter)
+            IndexingTargetType.WarFile, IndexingTargetType.JarFile -> newRegistry.indexForJarFile(target.path, stringInterner, insertedToCommitCounter)
         }
     }
+    newRegistry.commit()
 
     indexerStatus = IndexerStatus(
         running = true,
@@ -225,6 +234,7 @@ private fun indexToFileBasedIndex(paths: List<String>, temporary: Boolean) {
             throw th
         }
     }
+    newRegistry.autocommit = true
     newRegistry.flush()
     globalIndexRegistry = newRegistry
     setIndexerStatusToFinish()

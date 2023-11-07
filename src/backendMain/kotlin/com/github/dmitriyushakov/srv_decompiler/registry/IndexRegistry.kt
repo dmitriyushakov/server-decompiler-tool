@@ -7,4 +7,6 @@ interface IndexRegistry {
     val subjectsIndex: PathIndex<Subject>
     val outgoingDependenciesIndex: PathIndex<Dependency>
     val incomingDependenciesIndex: PathIndex<Dependency>
+
+    fun commit()
 }
