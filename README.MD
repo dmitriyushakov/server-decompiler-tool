@@ -41,5 +41,5 @@ java -jar server-decompiler-tool.jar --index file "/path/to/app/libs"
 ```
 
 ## Features to implement in future releases
-* File based index. Current implementation support only in memory index. It could require large heap size to scan solution.
+* Ability to exclude part of subjects from index + lazy index. It would allow to reduce Java Heap size for in memory index and increase speed of creation for file based index.
 * Maybe some other things. I didn't decide yet.
