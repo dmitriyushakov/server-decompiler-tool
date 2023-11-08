@@ -10,7 +10,7 @@ plugins {
 }
 
 group = "com.github.dmitriyushakov.srv_decompiler"
-version = "0.2"
+version = "0.3"
 
 repositories {
     mavenCentral()
